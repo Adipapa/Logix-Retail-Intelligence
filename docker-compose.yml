@@ -3,10 +3,11 @@ services:
     image: postgres:16-alpine
     container_name: logix-postgres
     restart: unless-stopped
+    env_file:
+      - ./backend/.env
     environment:
       POSTGRES_DB: logix_retail
       POSTGRES_USER: logix
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-db-password}
     volumes:
       - logix_postgres_data:/var/lib/postgresql/data
     healthcheck:
