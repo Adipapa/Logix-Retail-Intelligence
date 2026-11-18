@@ -12,3 +12,4 @@ dropbox>=12,<13
 openpyxl>=3.1,<4
 pandas>=2.2,<3
 python-dotenv>=1,<2
+APScheduler>=3.10,<4
