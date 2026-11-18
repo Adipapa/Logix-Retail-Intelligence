@@ -24,7 +24,7 @@ import {
   type WorkspaceData,
 } from './services/workspaceRepository';
 import { buildHistoricalSeedDataset } from './services/seedData';
-import { apiLogin, apiMe, apiLogout } from './services/api';
+import { apiLogin, apiMe, apiLogout, apiDropboxSync } from './services/api';
 import { parseExcelWorkbook } from './services/workbookEngine';
 import type {
   DailyReport,
@@ -228,50 +228,16 @@ export default function App() {
   }, [workspace, filters]);
 
   const handleTriggerManualSync = async () => {
-    const latestCursor = workspace.syncRuns[0]?.cursorAfter || 'dbx_cur_init';
-    if (isFirebaseAuthenticated) {
-      await recordManualSyncRun(
-        userProfile.uid,
-        userProfile.email,
-        latestCursor,
-        workspace.workbooks.length
-      );
-      await refreshCloudWorkspace(userProfile.uid, userProfile.email);
+    if (!isAuthenticated) {
+      setAuthNotice('Sign in with a central management administrator account to run Dropbox sync.');
       return;
     }
-
-    const now = new Date().toISOString();
-    const syncRun: SyncRun = {
-      ownerUid: userProfile.uid,
-      syncId: sanitizeId(`sync_manual_${Date.now()}`),
-      triggerType: 'manual_admin',
-      cursorBefore: latestCursor,
-      cursorAfter: `dbx_cur_${Date.now().toString(36)}`,
-      filesSeen: workspace.workbooks.length,
-      filesQueued: 0,
-      filesSkipped: workspace.workbooks.length,
-      status: 'completed',
-      durationMs: 940,
-      startedAt: now,
-      completedAt: now,
-    };
-    setWorkspace((prev) => ({
-      ...prev,
-      syncRuns: [syncRun, ...prev.syncRuns],
-      auditLogs: [
-        {
-          ownerUid: userProfile.uid,
-          auditId: sanitizeId(`aud_sync_${Date.now()}`),
-          actorEmail: userProfile.email,
-          action: 'MANUAL_DROPBOX_SYNC_RUN',
-          entityType: 'sync_run',
-          entityId: syncRun.syncId,
-          details: `Triggered Dropbox cursor scan (${workspace.workbooks.length} files checked).`,
-          timestamp: now,
-        },
-        ...prev.auditLogs,
-      ],
-    }));
+    try {
+      const result = await apiDropboxSync();
+      setAuthNotice(`Dropbox inventory scan completed: ${result.files_seen} workbooks checked; ${result.new_or_changed} new or revised; ${result.tracked_workbooks} tracked. Workbook values have not yet been imported into PostgreSQL.`);
+    } catch (err) {
+      setAuthNotice(err instanceof Error ? err.message : 'Dropbox sync failed.');
+    }
   };
 
   const handleUploadWorkbook = async (file: File) => {
@@ -281,6 +247,7 @@ export default function App() {
       await refreshCloudWorkspace(userProfile.uid, userProfile.email);
     } else {
       const now = new Date().toISOString();
+      setAuthNotice('Workbook parsed in this browser preview only. It has not been saved to PostgreSQL.');
       const incomingIds = new Set(bundle.dailyReports.map((r) => r.reportId));
       setWorkspace((prev) => ({
         ...prev,
@@ -416,6 +383,10 @@ export default function App() {
         latestSync={workspace.syncRuns[0]}
         showGlobalFilters={!hideGlobalFilters}
       >
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900">
+          <strong>Preview environment:</strong> dashboard figures are sample/demo data. Dropbox sync currently inventories workbook files only; extraction into PostgreSQL and reconciliation are not yet enabled.
+        </div>
+
         {authNotice && (
           <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800 flex items-center justify-between gap-4">
             <span>{authNotice}</span>
