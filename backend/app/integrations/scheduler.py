@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import select
+from dropbox.exceptions import ApiError
 from app.database.session import SessionLocal
 from app.core.config import settings
 from app.models.integration import DropboxFile, DropboxSyncState
-from app.integrations.dropbox_client import scan_folder
+from app.integrations.dropbox_client import scan_folder, reset_cursor
 
 _scheduler = BackgroundScheduler(timezone="UTC")
 
@@ -18,7 +19,14 @@ def run_scheduled_inventory():
             db.add(state)
             db.flush()
         try:
-            records, next_cursor = scan_folder(state.cursor)
+            try:
+                records, next_cursor = scan_folder(state.cursor)
+            except ApiError as exc:
+                reset_check = getattr(exc.error, "is_reset", lambda: False)
+                if state.cursor and reset_check():
+                    records, next_cursor = reset_cursor()
+                else:
+                    raise
             for item in records:
                 existing = db.scalar(select(DropboxFile).where(DropboxFile.dropbox_id == item["dropbox_id"]))
                 if existing is None:
