@@ -59,3 +59,9 @@ def scan_folder(cursor: str | None = None):
 
 def reset_cursor():
     return scan_folder(None)
+
+def download_file(path_lower: str) -> bytes:
+    """Download the exact current Dropbox revision's bytes for server-side extraction."""
+    client = get_client()
+    _metadata, response = client.files_download(path_lower)
+    return response.content
