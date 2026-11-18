@@ -8,7 +8,7 @@ from app.core.config import settings
 from app.database.session import get_db
 from app.models.user import User
 from app.models.integration import DropboxFile, DropboxSyncState
-from app.integrations.dropbox_client import DropboxNotConfigured, scan_folder, reset_cursor
+from app.integrations.dropbox_client import DropboxNotConfigured, scan_folder, reset_cursor\nfrom app.integrations.dropbox_import_queue import process_pending_workbooks
 
 router = APIRouter(prefix="/integrations/dropbox", tags=["Dropbox"])
 
