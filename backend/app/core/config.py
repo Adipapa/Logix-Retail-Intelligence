@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     bootstrap_admin_email: str | None = None
     bootstrap_admin_password: str | None = None
     bootstrap_admin_name: str = "System Administrator"
+    dropbox_access_token: str | None = None
+    dropbox_refresh_token: str | None = None
+    dropbox_app_key: str | None = None
+    dropbox_app_secret: str | None = None
+    dropbox_root_path: str = "/Logix Retail"
 
     @property
     def cors_origin_list(self) -> list[str]:
