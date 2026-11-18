@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { ReportDetailDrawer } from './components/ReportDetailDrawer';
 import { Shell } from './components/Shell';
 import { DataSyncMonitorView } from './features/DataSyncMonitorView';
@@ -12,7 +11,6 @@ import { ReconciliationView } from './features/ReconciliationView';
 import { ReportsExportView } from './features/ReportsExportView';
 import { StationsView } from './features/StationsView';
 import { StockControlView } from './features/StockControlView';
-import { auth, googleAuthProvider } from './lib/firebase';
 import { sanitizeId } from './lib/formatters';
 import {
   commitParsedWorkbookBundle,
@@ -24,8 +22,9 @@ import {
   saveReportPreset,
   seedHistoricalWorkspace,
   type WorkspaceData,
-} from './services/firestoreRepository';
+} from './services/workspaceRepository';
 import { buildHistoricalSeedDataset } from './services/seedData';
+import { apiLogin, apiMe, apiLogout } from './services/api';
 import { parseExcelWorkbook } from './services/workbookEngine';
 import type {
   DailyReport,
@@ -87,7 +86,8 @@ function parseHashRoute(): { route: RouteId; stationId: string | null } {
 
 export default function App() {
   const [authReady, setAuthReady] = useState(false);
-  const [isFirebaseAuthenticated, setIsFirebaseAuthenticated] = useState(false);
+  const [isFirebaseAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(PREVIEW_USER);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
 
@@ -146,45 +146,46 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      if (!fbUser) {
-        setIsFirebaseAuthenticated(false);
-        setUserProfile(PREVIEW_USER);
-        setWorkspace(buildLocalPreviewWorkspace());
-        setAuthReady(true);
-        return;
+    let active = true;
+    apiMe().then((apiUser) => {
+      if (!active) return;
+      if (apiUser) {
+        setUserProfile({
+          uid: String(apiUser.id),
+          email: apiUser.email,
+          displayName: apiUser.full_name,
+          role: apiUser.role,
+          createdAt: new Date().toISOString(),
+        });
+        setIsAuthenticated(true);
       }
-      try {
-        const profile = await getOrCreateUserProfile(
-          fbUser.uid,
-          fbUser.email || '',
-          fbUser.displayName || 'Management User'
-        );
-        setIsFirebaseAuthenticated(true);
-        setUserProfile(profile);
-        setAuthReady(true);
-        await refreshCloudWorkspace(profile.uid, profile.email);
-      } catch (err) {
-        setAuthNotice(err instanceof Error ? err.message : 'Sign-in sync error; staying in local workspace.');
-        setIsFirebaseAuthenticated(false);
-        setUserProfile(PREVIEW_USER);
-        setAuthReady(true);
-      }
-    });
-    return () => unsubscribe();
-  }, [refreshCloudWorkspace]);
+      setAuthReady(true);
+    }).catch(() => { if (active) setAuthReady(true); });
+    return () => { active = false; };
+  }, []);
 
-  const handleSignIn = async () => {
+  const handleSignIn = async (email: string, password: string) => {
     setAuthNotice(null);
     try {
-      await signInWithPopup(auth, googleAuthProvider);
+      const apiUser = await apiLogin(email, password);
+      setUserProfile({
+        uid: String(apiUser.id),
+        email: apiUser.email,
+        displayName: apiUser.full_name,
+        role: apiUser.role,
+        createdAt: new Date().toISOString(),
+      });
+      setIsAuthenticated(true);
     } catch (err) {
-      setAuthNotice(err instanceof Error ? err.message : 'Google Sign-In was cancelled or blocked.');
+      setAuthNotice(err instanceof Error ? err.message : 'Sign-in failed.');
+      throw err;
     }
   };
 
   const handleSignOut = async () => {
-    await signOut(auth);
+    apiLogout();
+    setIsAuthenticated(false);
+    setUserProfile(PREVIEW_USER);
   };
 
   const years = useMemo(() => {
@@ -405,7 +406,7 @@ export default function App() {
         activeRoute={activeRoute}
         onNavigate={(r) => navigate(r, null)}
         user={userProfile}
-        isAuthenticated={isFirebaseAuthenticated}
+        isAuthenticated={isAuthenticated}
         onSignIn={handleSignIn}
         onSignOut={handleSignOut}
         filters={filters}
