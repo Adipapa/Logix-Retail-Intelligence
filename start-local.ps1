@@ -25,7 +25,7 @@ if (-not (Test-Path "backend/.env")) {
   $envText = [regex]::Replace($envText, '(?m)^POSTGRES_PASSWORD=.*$', "POSTGRES_PASSWORD=$dbPassword")
   $envText = [regex]::Replace($envText, '(?m)^BOOTSTRAP_ADMIN_EMAIL=.*$', "BOOTSTRAP_ADMIN_EMAIL=$adminEmail")
   $envText = [regex]::Replace($envText, '(?m)^BOOTSTRAP_ADMIN_PASSWORD=.*$', "BOOTSTRAP_ADMIN_PASSWORD=$adminPassword")
-  [System.IO.File]::WriteAllText("backend/.env", $envText, (New-Object System.Text.UTF8Encoding($false)))
+  [System.IO.File]::WriteAllText("backend/.env", $envText, (New-Object System.Text.UTF8Encoding -ArgumentList $false))
   $adminPassword = $null
   Write-Host "Private backend configuration created. Do not upload or share backend/.env." -ForegroundColor Green
 }
