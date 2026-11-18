@@ -13,6 +13,10 @@ import app.models.integration  # register Dropbox metadata tables
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    if settings.secret_key.startswith("replace-with-"):
+        raise RuntimeError("Set a unique SECRET_KEY in backend/.env before starting the API.")
+    if settings.bootstrap_admin_password and settings.bootstrap_admin_password.startswith("change-this"):
+        raise RuntimeError("Replace BOOTSTRAP_ADMIN_PASSWORD in backend/.env before starting the API.")
     # Development bootstrap only. Production schema changes must run through Alembic.
     if settings.app_env == "development":
         Base.metadata.create_all(bind=engine)
