@@ -1,33 +1,48 @@
-from datetime import datetime, timezone
 import dropbox
-from dropbox.exceptions import AuthError, ApiError
-from dropbox.files import FileMetadata, FolderMetadata
+from dropbox.files import FileMetadata
 from app.core.config import settings
 
 class DropboxNotConfigured(RuntimeError):
     pass
 
 def get_client() -> dropbox.Dropbox:
-    if not settings.dropbox_access_token:
-        raise DropboxNotConfigured("Dropbox is not configured. Add DROPBOX_ACCESS_TOKEN to backend/.env.")
-    return dropbox.Dropbox(oauth2_access_token=settings.dropbox_access_token)
+    if settings.dropbox_refresh_token and settings.dropbox_app_key and settings.dropbox_app_secret:
+        return dropbox.Dropbox(
+            oauth2_refresh_token=settings.dropbox_refresh_token,
+            app_key=settings.dropbox_app_key,
+            app_secret=settings.dropbox_app_secret,
+        )
+    if settings.dropbox_access_token:
+        return dropbox.Dropbox(oauth2_access_token=settings.dropbox_access_token)
+    raise DropboxNotConfigured(
+        "Dropbox is not configured. Set the OAuth refresh token, app key and app secret in backend/.env."
+    )
 
 def is_supported_workbook(name: str) -> bool:
-    lower = name.lower()
-    return lower.endswith((".xlsx", ".xlsm"))
+    return name.lower().endswith((".xlsx", ".xlsm"))
 
 def entry_to_record(entry: FileMetadata) -> dict:
-    modified = entry.server_modified
-    if modified and modified.tzinfo is None:
-        modified = modified.replace(tzinfo=timezone.utc)
     return {
         "dropbox_id": entry.id,
         "path_lower": entry.path_lower,
         "name": entry.name,
         "revision": entry.rev,
         "size_bytes": entry.size,
-        "modified_at": modified,
+        "modified_at": entry.server_modified,
     }
+
+def _collect(result):
+    entries = [
+        entry_to_record(item) for item in result.entries
+        if isinstance(item, FileMetadata) and is_supported_workbook(item.name)
+    ]
+    while result.has_more:
+        result = get_client().files_list_folder_continue(result.cursor)
+        entries.extend(
+            entry_to_record(item) for item in result.entries
+            if isinstance(item, FileMetadata) and is_supported_workbook(item.name)
+        )
+    return entries, result.cursor
 
 def scan_folder(cursor: str | None = None):
     client = get_client()
@@ -37,20 +52,10 @@ def scan_folder(cursor: str | None = None):
         result = client.files_list_folder(
             settings.dropbox_root_path or "",
             recursive=True,
-            include_deleted=False,
+            include_deleted=True,
             limit=2000,
         )
-    entries = [entry_to_record(e) for e in result.entries if isinstance(e, FileMetadata) and is_supported_workbook(e.name)]
-    while result.has_more:
-        result = client.files_list_folder_continue(result.cursor)
-        entries.extend(entry_to_record(e) for e in result.entries if isinstance(e, FileMetadata) and is_supported_workbook(e.name))
-    return entries, result.cursor
+    return _collect(result)
 
 def reset_cursor():
-    client = get_client()
-    result = client.files_list_folder(settings.dropbox_root_path or "", recursive=True, include_deleted=False, limit=2000)
-    entries = [entry_to_record(e) for e in result.entries if isinstance(e, FileMetadata) and is_supported_workbook(e.name)]
-    while result.has_more:
-        result = client.files_list_folder_continue(result.cursor)
-        entries.extend(entry_to_record(e) for e in result.entries if isinstance(e, FileMetadata) and is_supported_workbook(e.name))
-    return entries, result.cursor
+    return scan_folder(None)
