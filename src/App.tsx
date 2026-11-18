@@ -86,7 +86,7 @@ function parseHashRoute(): { route: RouteId; stationId: string | null } {
 
 export default function App() {
   const [authReady, setAuthReady] = useState(false);
-  const [isFirebaseAuthenticated] = useState(false);
+  const [isBackendWorkspaceConnected] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(PREVIEW_USER);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
@@ -242,7 +242,7 @@ export default function App() {
 
   const handleUploadWorkbook = async (file: File) => {
     const bundle = await parseExcelWorkbook(file, userProfile.uid, workspace.stations);
-    if (isFirebaseAuthenticated) {
+    if (isBackendWorkspaceConnected) {
       await commitParsedWorkbookBundle(userProfile.uid, userProfile.email, bundle);
       await refreshCloudWorkspace(userProfile.uid, userProfile.email);
     } else {
@@ -284,7 +284,7 @@ export default function App() {
   };
 
   const handleSavePreset = async (preset: SavedReport) => {
-    if (isFirebaseAuthenticated) {
+    if (isBackendWorkspaceConnected) {
       await saveReportPreset(preset);
       await logAuditAction(
         userProfile.uid,
@@ -308,7 +308,7 @@ export default function App() {
   };
 
   const handleDeletePreset = async (id: string) => {
-    if (isFirebaseAuthenticated) {
+    if (isBackendWorkspaceConnected) {
       await deleteReportPreset(id);
       await refreshCloudWorkspace(userProfile.uid, userProfile.email);
       return;
@@ -324,7 +324,7 @@ export default function App() {
   };
 
   const handleLogExport = async (format: 'EXCEL' | 'PDF', rowCount: number) => {
-    if (isFirebaseAuthenticated) {
+    if (isBackendWorkspaceConnected) {
       await logAuditAction(
         userProfile.uid,
         userProfile.email,
