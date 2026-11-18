@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.database.session import Base, SessionLocal, engine
 from app.models.user import User, UserRole
+from app.integrations.scheduler import start_scheduler, stop_scheduler
 import app.models.integration  # register Dropbox metadata tables
 
 @asynccontextmanager
@@ -23,7 +24,9 @@ async def lifespan(_: FastAPI):
                             password_hash=hash_password(settings.bootstrap_admin_password),
                             role=UserRole.admin))
                 db.commit()
+    start_scheduler()
     yield
+    stop_scheduler()
 
 app = FastAPI(title=settings.app_name, version="1.0.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origin_list,
