@@ -36,7 +36,8 @@ def sync_now(_: User = Depends(require_admin), db: Session = Depends(get_db)):
             records, next_cursor = scan_folder(state.cursor)
         except ApiError as exc:
             # A stale cursor must trigger a full inventory, not be silently advanced.
-            if state.cursor and "reset" in str(exc).lower():
+            is_reset = getattr(exc.error, "is_reset", lambda: False)()
+            if state.cursor and is_reset:
                 records, next_cursor = reset_cursor()
             else:
                 raise
