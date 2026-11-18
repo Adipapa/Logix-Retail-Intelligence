@@ -1,0 +1,525 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Reusable Security Primitives ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerified() && request.auth.token.email == 'MuhammedGaye15@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin()
+        || (isVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isStr(v, minLen, maxLen) {
+      return v is string && v.size() >= minLen && v.size() <= maxLen;
+    }
+
+    function isNumOrNull(v) {
+      return v == null || v is number;
+    }
+
+    function isOwnerDoc(data) {
+      return data.ownerUid is string && data.ownerUid == request.auth.uid;
+    }
+
+    // --- Entity Validation Blueprints ---
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'createdAt'])
+        && isStr(data.uid, 1, 128)
+        && data.uid == request.auth.uid
+        && isStr(data.email, 3, 200)
+        && isStr(data.displayName, 1, 120)
+        && data.role in ['management', 'admin']
+        && isStr(data.createdAt, 10, 40);
+    }
+
+    function isValidStation(data) {
+      return data.keys().hasAll([
+          'ownerUid', 'stationId', 'canonicalName', 'territory', 'folderPath',
+          'aliases', 'activeStatus', 'pumpCount', 'tankCapacityPms', 'tankCapacityAgo',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid', 'stationId', 'canonicalName', 'territory', 'folderPath',
+          'aliases', 'activeStatus', 'pumpCount', 'tankCapacityPms', 'tankCapacityAgo',
+          'createdAt', 'updatedAt'
+        ])
+        && isStr(data.ownerUid, 1, 128)
+        && isValidId(data.stationId)
+        && isStr(data.canonicalName, 1, 80)
+        && isStr(data.territory, 1, 80)
+        && isStr(data.folderPath, 1, 200)
+        && data.aliases is list
+        && data.aliases.size() <= 10
+        && (data.aliases.size() == 0 || isStr(data.aliases[0], 1, 80))
+        && data.activeStatus in ['active', 'inactive']
+        && data.pumpCount is number && data.pumpCount >= 0 && data.pumpCount <= 64
+        && data.tankCapacityPms is number && data.tankCapacityPms >= 0
+        && data.tankCapacityAgo is number && data.tankCapacityAgo >= 0
+        && isStr(data.createdAt, 10, 40)
+        && isStr(data.updatedAt, 10, 40);
+    }
+
+    function isValidSourceWorkbook(data) {
+      return data.keys().hasAll([
+          'ownerUid', 'workbookId', 'stationId', 'stationName', 'year', 'month',
+          'dropboxFileId', 'path', 'revision', 'fileName', 'sizeBytes',
+          'sheetCount', 'dailySheetsFound', 'hasSummarySheet',
+          'templateVersion', 'calculationVersion', 'status', 'modifiedAt', 'importedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid', 'workbookId', 'stationId', 'stationName', 'year', 'month',
+          'dropboxFileId', 'path', 'revision', 'fileName', 'sizeBytes',
+          'sheetCount', 'dailySheetsFound', 'hasSummarySheet',
+          'templateVersion', 'calculationVersion', 'status', 'modifiedAt', 'importedAt'
+        ])
+        && isStr(data.ownerUid, 1, 128)
+        && isValidId(data.workbookId)
+        && isStr(data.stationId, 1, 64)
+        && isStr(data.stationName, 1, 80)
+        && data.year is number && data.year >= 2020 && data.year <= 2035
+        && data.month is number && data.month >= 1 && data.month <= 12
+        && isStr(data.dropboxFileId, 1, 120)
+        && isStr(data.path, 1, 300)
+        && isStr(data.revision, 1, 80)
+        && isStr(data.fileName, 1, 160)
+        && data.sizeBytes is number && data.sizeBytes >= 0
+        && data.sheetCount is number && data.sheetCount >= 0 && data.sheetCount <= 100
+        && data.dailySheetsFound is number && data.dailySheetsFound >= 0 && data.dailySheetsFound <= 31
+        && data.hasSummarySheet is bool
+        && isStr(data.templateVersion, 1, 40)
+        && isStr(data.calculationVersion, 1, 40)
+        && data.status in ['imported', 'warning', 'incomplete', 'failed']
+        && isStr(data.modifiedAt, 10, 40)
+        && isStr(data.importedAt, 10, 40);
+    }
+
+    function isValidDailyReport(data) {
+      return data.keys().hasAll([
+          'ownerUid', 'reportId', 'stationId', 'stationName', 'territory',
+          'workbookId', 'workbookPath', 'workbookRevision', 'worksheetName',
+          'reportDate', 'year', 'month', 'weekNumber', 'weekday', 'completeness',
+          'pumpReadings', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid', 'reportId', 'stationId', 'stationName', 'territory',
+          'workbookId', 'workbookPath', 'workbookRevision', 'worksheetName',
+          'reportDate', 'year', 'month', 'weekNumber', 'weekday', 'completeness',
+          'pmsMorningLitres', 'pmsAfternoonLitres', 'pmsNightLitres', 'pmsTotalLitres',
+          'pmsSalesGmd', 'pmsReturnToTankLitres', 'pmsCashFuelGmd',
+          'agoMorningLitres', 'agoAfternoonLitres', 'agoNightLitres', 'agoTotalLitres',
+          'agoSalesGmd', 'agoReturnToTankLitres', 'agoCashFuelGmd',
+          'totalFuelSalesGmd',
+          'pmsOpeningStock', 'pmsReceipts', 'pmsTheoreticalStock', 'pmsClosingStock',
+          'pmsStockDiff', 'pmsStockControlRatio',
+          'agoOpeningStock', 'agoReceipts', 'agoTheoreticalStock', 'agoClosingStock',
+          'agoStockDiff', 'agoStockControlRatio',
+          'directDeliveryLitres', 'diversionLitres', 'diversionDirection',
+          'shortageLitres', 'receivedLitres', 'deliveryOrigin', 'deliveryDestination',
+          'creditSalesGmd', 'couponsGmd', 'qmoneyGmd', 'waychitGmd',
+          'chequesGmd', 'cashGmd', 'bankedGmd', 'reconciliationDiffGmd',
+          'generatorRuntimeHrs', 'generatorRefuelLitres', 'cashpowerKwh', 'cashpowerPurchaseGmd',
+          'noteText', 'sourceRowRef', 'pumpReadings', 'createdAt', 'updatedAt'
+        ])
+        && isStr(data.ownerUid, 1, 128)
+        && isValidId(data.reportId)
+        && isStr(data.stationId, 1, 64)
+        && isStr(data.stationName, 1, 80)
+        && isStr(data.territory, 1, 80)
+        && isStr(data.workbookId, 1, 128)
+        && isStr(data.workbookPath, 1, 300)
+        && isStr(data.workbookRevision, 1, 80)
+        && isStr(data.worksheetName, 1, 64)
+        && isStr(data.reportDate, 8, 16)
+        && data.year is number && data.year >= 2020 && data.year <= 2035
+        && data.month is number && data.month >= 1 && data.month <= 12
+        && data.weekNumber is number && data.weekNumber >= 1 && data.weekNumber <= 53
+        && isStr(data.weekday, 2, 16)
+        && data.completeness in ['imported', 'warning', 'incomplete', 'failed']
+        && isNumOrNull(data.pmsMorningLitres)
+        && isNumOrNull(data.pmsAfternoonLitres)
+        && isNumOrNull(data.pmsNightLitres)
+        && isNumOrNull(data.pmsTotalLitres)
+        && isNumOrNull(data.pmsSalesGmd)
+        && isNumOrNull(data.pmsReturnToTankLitres)
+        && isNumOrNull(data.pmsCashFuelGmd)
+        && isNumOrNull(data.agoMorningLitres)
+        && isNumOrNull(data.agoAfternoonLitres)
+        && isNumOrNull(data.agoNightLitres)
+        && isNumOrNull(data.agoTotalLitres)
+        && isNumOrNull(data.agoSalesGmd)
+        && isNumOrNull(data.agoReturnToTankLitres)
+        && isNumOrNull(data.agoCashFuelGmd)
+        && isNumOrNull(data.totalFuelSalesGmd)
+        && isNumOrNull(data.pmsOpeningStock)
+        && isNumOrNull(data.pmsReceipts)
+        && isNumOrNull(data.pmsTheoreticalStock)
+        && isNumOrNull(data.pmsClosingStock)
+        && isNumOrNull(data.pmsStockDiff)
+        && isNumOrNull(data.pmsStockControlRatio)
+        && isNumOrNull(data.agoOpeningStock)
+        && isNumOrNull(data.agoReceipts)
+        && isNumOrNull(data.agoTheoreticalStock)
+        && isNumOrNull(data.agoClosingStock)
+        && isNumOrNull(data.agoStockDiff)
+        && isNumOrNull(data.agoStockControlRatio)
+        && isNumOrNull(data.directDeliveryLitres)
+        && isNumOrNull(data.diversionLitres)
+        && (data.diversionDirection == null || isStr(data.diversionDirection, 0, 120))
+        && isNumOrNull(data.shortageLitres)
+        && isNumOrNull(data.receivedLitres)
+        && (data.deliveryOrigin == null || isStr(data.deliveryOrigin, 0, 120))
+        && (data.deliveryDestination == null || isStr(data.deliveryDestination, 0, 120))
+        && isNumOrNull(data.creditSalesGmd)
+        && isNumOrNull(data.couponsGmd)
+        && isNumOrNull(data.qmoneyGmd)
+        && isNumOrNull(data.waychitGmd)
+        && isNumOrNull(data.chequesGmd)
+        && isNumOrNull(data.cashGmd)
+        && isNumOrNull(data.bankedGmd)
+        && isNumOrNull(data.reconciliationDiffGmd)
+        && isNumOrNull(data.generatorRuntimeHrs)
+        && isNumOrNull(data.generatorRefuelLitres)
+        && isNumOrNull(data.cashpowerKwh)
+        && isNumOrNull(data.cashpowerPurchaseGmd)
+        && isStr(data.noteText, 0, 600)
+        && isStr(data.sourceRowRef, 0, 80)
+        && data.pumpReadings is list
+        && data.pumpReadings.size() <= 16
+        && (data.pumpReadings.size() == 0 || data.pumpReadings[0] is map)
+        && isStr(data.createdAt, 10, 40)
+        && isStr(data.updatedAt, 10, 40);
+    }
+
+    function isValidSummaryReconciliation(data) {
+      return data.keys().hasAll([
+          'ownerUid', 'reconciliationId', 'workbookId', 'stationId', 'stationName',
+          'year', 'month', 'reportDate', 'fieldName', 'product',
+          'dailyDerivedValue', 'summaryValue', 'variance', 'tolerance', 'result', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid', 'reconciliationId', 'workbookId', 'stationId', 'stationName',
+          'year', 'month', 'reportDate', 'fieldName', 'product',
+          'dailyDerivedValue', 'summaryValue', 'variance', 'tolerance', 'result', 'createdAt'
+        ])
+        && isStr(data.ownerUid, 1, 128)
+        && isValidId(data.reconciliationId)
+        && isStr(data.workbookId, 1, 128)
+        && isStr(data.stationId, 1, 64)
+        && isStr(data.stationName, 1, 80)
+        && data.year is number
+        && data.month is number
+        && isStr(data.reportDate, 4, 16)
+        && isStr(data.fieldName, 1, 80)
+        && data.product in ['PMS', 'AGO', 'GROUP']
+        && isNumOrNull(data.dailyDerivedValue)
+        && isNumOrNull(data.summaryValue)
+        && isNumOrNull(data.variance)
+        && data.tolerance is number
+        && data.result in ['matched', 'within_tolerance', 'variance_exceeded', 'missing_summary']
+        && isStr(data.createdAt, 10, 40);
+    }
+
+    function isValidImportJob(data) {
+      return data.keys().hasAll([
+          'ownerUid', 'jobId', 'workbookId', 'fileName', 'stationName',
+          'year', 'month', 'status', 'recordsExtracted', 'warningsCount',
+          'errorsCount', 'errorSummary', 'retryCount', 'startedAt', 'completedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid', 'jobId', 'workbookId', 'fileName', 'stationName',
+          'year', 'month', 'status', 'recordsExtracted', 'warningsCount',
+          'errorsCount', 'errorSummary', 'retryCount', 'startedAt', 'completedAt'
+        ])
+        && isStr(data.ownerUid, 1, 128)
+        && isValidId(data.jobId)
+        && isStr(data.workbookId, 1, 128)
+        && isStr(data.fileName, 1, 160)
+        && isStr(data.stationName, 1, 80)
+        && data.year is number
+        && data.month is number
+        && data.status in ['completed', 'completed_with_warnings', 'failed']
+        && data.recordsExtracted is number && data.recordsExtracted >= 0
+        && data.warningsCount is number && data.warningsCount >= 0
+        && data.errorsCount is number && data.errorsCount >= 0
+        && isStr(data.errorSummary, 0, 400)
+        && data.retryCount is number && data.retryCount >= 0
+        && isStr(data.startedAt, 10, 40)
+        && isStr(data.completedAt, 10, 40);
+    }
+
+    function isValidImportWarning(data) {
+      return data.keys().hasAll([
+          'ownerUid', 'warningId', 'jobId', 'workbookId', 'stationId',
+          'stationName', 'reportDate', 'worksheet', 'field', 'severity',
+          'message', 'sourceReference', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid', 'warningId', 'jobId', 'workbookId', 'stationId',
+          'stationName', 'reportDate', 'worksheet', 'field', 'severity',
+          'message', 'sourceReference', 'createdAt'
+        ])
+        && isStr(data.ownerUid, 1, 128)
+        && isValidId(data.warningId)
+        && isStr(data.jobId, 1, 128)
+        && isStr(data.workbookId, 1, 128)
+        && isStr(data.stationId, 1, 64)
+        && isStr(data.stationName, 1, 80)
+        && isStr(data.reportDate, 0, 16)
+        && isStr(data.worksheet, 1, 64)
+        && isStr(data.field, 1, 64)
+        && data.severity in ['error', 'warning', 'info']
+        && isStr(data.message, 1, 400)
+        && isStr(data.sourceReference, 1, 120)
+        && isStr(data.createdAt, 10, 40);
+    }
+
+    function isValidSyncRun(data) {
+      return data.keys().hasAll([
+          'ownerUid', 'syncId', 'triggerType', 'cursorBefore', 'cursorAfter',
+          'filesSeen', 'filesQueued', 'filesSkipped', 'status',
+          'durationMs', 'startedAt', 'completedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid', 'syncId', 'triggerType', 'cursorBefore', 'cursorAfter',
+          'filesSeen', 'filesQueued', 'filesSkipped', 'status',
+          'durationMs', 'startedAt', 'completedAt'
+        ])
+        && isStr(data.ownerUid, 1, 128)
+        && isValidId(data.syncId)
+        && data.triggerType in ['scheduled_15m', 'manual_admin', 'workbook_upload']
+        && isStr(data.cursorBefore, 1, 120)
+        && isStr(data.cursorAfter, 1, 120)
+        && data.filesSeen is number && data.filesSeen >= 0
+        && data.filesQueued is number && data.filesQueued >= 0
+        && data.filesSkipped is number && data.filesSkipped >= 0
+        && data.status in ['completed', 'partial', 'failed']
+        && data.durationMs is number && data.durationMs >= 0
+        && isStr(data.startedAt, 10, 40)
+        && isStr(data.completedAt, 10, 40);
+    }
+
+    function isValidSavedReport(data) {
+      return data.keys().hasAll([
+          'ownerUid', 'savedReportId', 'title', 'stationId', 'year',
+          'month', 'fuelType', 'shift', 'statusFilter', 'createdByEmail', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid', 'savedReportId', 'title', 'stationId', 'year',
+          'month', 'fuelType', 'shift', 'statusFilter', 'createdByEmail', 'createdAt'
+        ])
+        && isStr(data.ownerUid, 1, 128)
+        && isValidId(data.savedReportId)
+        && isStr(data.title, 1, 120)
+        && isStr(data.stationId, 1, 64)
+        && isStr(data.year, 1, 16)
+        && isStr(data.month, 1, 16)
+        && data.fuelType in ['ALL', 'PMS', 'AGO']
+        && data.shift in ['ALL', 'Morning', 'Afternoon', 'Night']
+        && isStr(data.statusFilter, 1, 24)
+        && isStr(data.createdByEmail, 3, 200)
+        && isStr(data.createdAt, 10, 40);
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll([
+          'ownerUid', 'auditId', 'actorEmail', 'action',
+          'entityType', 'entityId', 'details', 'timestamp'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid', 'auditId', 'actorEmail', 'action',
+          'entityType', 'entityId', 'details', 'timestamp'
+        ])
+        && isStr(data.ownerUid, 1, 128)
+        && isValidId(data.auditId)
+        && isStr(data.actorEmail, 3, 200)
+        && isStr(data.action, 1, 80)
+        && isStr(data.entityType, 1, 64)
+        && isStr(data.entityId, 1, 128)
+        && isStr(data.details, 1, 400)
+        && isStr(data.timestamp, 10, 40);
+    }
+
+    // --- Collection Rules ---
+
+    match /admins/{adminUid} {
+      allow get: if isVerified() && (request.auth.uid == adminUid || isBootstrappedAdmin());
+      allow list, create, update, delete: if isBootstrappedAdmin();
+    }
+
+    match /users/{userId} {
+      allow get: if isVerified() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isVerified() && (isBootstrappedAdmin() || resource.data.uid == request.auth.uid);
+      allow create: if isVerified()
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && isValidUserProfile(incoming())
+        && (incoming().role == 'management' || isBootstrappedAdmin());
+      allow update: if isVerified()
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && (
+          isAdmin()
+          || (
+            request.auth.uid == userId
+            && incoming().role == existing().role
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    match /stations/{stationId} {
+      allow get: if isVerified() && isValidId(stationId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (isBootstrappedAdmin() || resource.data.ownerUid == request.auth.uid);
+      allow create: if isVerified() && isValidId(stationId) && isValidStation(incoming()) && isOwnerDoc(incoming());
+      allow update: if isVerified()
+        && isValidId(stationId)
+        && isValidStation(incoming())
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().stationId == existing().stationId
+        && incoming().createdAt == existing().createdAt
+        && (existing().ownerUid == request.auth.uid || isAdmin())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'canonicalName', 'territory', 'folderPath', 'aliases', 'activeStatus',
+          'pumpCount', 'tankCapacityPms', 'tankCapacityAgo', 'updatedAt'
+        ]);
+      allow delete: if isVerified() && isValidId(stationId) && (existing().ownerUid == request.auth.uid || isAdmin());
+    }
+
+    match /source_workbooks/{workbookId} {
+      allow get: if isVerified() && isValidId(workbookId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (isBootstrappedAdmin() || resource.data.ownerUid == request.auth.uid);
+      allow create: if isVerified() && isValidId(workbookId) && isValidSourceWorkbook(incoming()) && isOwnerDoc(incoming());
+      allow update: if isVerified()
+        && isValidId(workbookId)
+        && isValidSourceWorkbook(incoming())
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().workbookId == existing().workbookId
+        && (existing().ownerUid == request.auth.uid || isAdmin())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'revision', 'path', 'sizeBytes', 'sheetCount', 'dailySheetsFound',
+          'hasSummarySheet', 'status', 'modifiedAt', 'importedAt'
+        ]);
+      allow delete: if isVerified() && isValidId(workbookId) && (existing().ownerUid == request.auth.uid || isAdmin());
+    }
+
+    match /daily_reports/{reportId} {
+      allow get: if isVerified() && isValidId(reportId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (isBootstrappedAdmin() || resource.data.ownerUid == request.auth.uid);
+      allow create: if isVerified() && isValidId(reportId) && isValidDailyReport(incoming()) && isOwnerDoc(incoming());
+      allow update: if isVerified()
+        && isValidId(reportId)
+        && isValidDailyReport(incoming())
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().reportId == existing().reportId
+        && incoming().createdAt == existing().createdAt
+        && (existing().ownerUid == request.auth.uid || isAdmin())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'workbookId', 'workbookPath', 'workbookRevision', 'worksheetName',
+          'completeness', 'pmsMorningLitres', 'pmsAfternoonLitres', 'pmsNightLitres',
+          'pmsTotalLitres', 'pmsSalesGmd', 'pmsReturnToTankLitres', 'pmsCashFuelGmd',
+          'agoMorningLitres', 'agoAfternoonLitres', 'agoNightLitres', 'agoTotalLitres',
+          'agoSalesGmd', 'agoReturnToTankLitres', 'agoCashFuelGmd', 'totalFuelSalesGmd',
+          'pmsOpeningStock', 'pmsReceipts', 'pmsTheoreticalStock', 'pmsClosingStock',
+          'pmsStockDiff', 'pmsStockControlRatio', 'agoOpeningStock', 'agoReceipts',
+          'agoTheoreticalStock', 'agoClosingStock', 'agoStockDiff', 'agoStockControlRatio',
+          'directDeliveryLitres', 'diversionLitres', 'diversionDirection',
+          'shortageLitres', 'receivedLitres', 'deliveryOrigin', 'deliveryDestination',
+          'creditSalesGmd', 'couponsGmd', 'qmoneyGmd', 'waychitGmd', 'chequesGmd',
+          'cashGmd', 'bankedGmd', 'reconciliationDiffGmd', 'generatorRuntimeHrs',
+          'generatorRefuelLitres', 'cashpowerKwh', 'cashpowerPurchaseGmd',
+          'noteText', 'sourceRowRef', 'pumpReadings', 'updatedAt'
+        ]);
+      allow delete: if isVerified() && isValidId(reportId) && (existing().ownerUid == request.auth.uid || isAdmin());
+    }
+
+    match /summary_reconciliations/{reconciliationId} {
+      allow get: if isVerified() && isValidId(reconciliationId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (isBootstrappedAdmin() || resource.data.ownerUid == request.auth.uid);
+      allow create: if isVerified() && isValidId(reconciliationId) && isValidSummaryReconciliation(incoming()) && isOwnerDoc(incoming());
+      allow update: if false;
+      allow delete: if isVerified() && isValidId(reconciliationId) && (existing().ownerUid == request.auth.uid || isAdmin());
+    }
+
+    match /import_jobs/{jobId} {
+      allow get: if isVerified() && isValidId(jobId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (isBootstrappedAdmin() || resource.data.ownerUid == request.auth.uid);
+      allow create: if isVerified() && isValidId(jobId) && isValidImportJob(incoming()) && isOwnerDoc(incoming());
+      allow update: if isVerified()
+        && isValidId(jobId)
+        && isValidImportJob(incoming())
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().jobId == existing().jobId
+        && (existing().ownerUid == request.auth.uid || isAdmin())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'recordsExtracted', 'warningsCount', 'errorsCount',
+          'errorSummary', 'retryCount', 'completedAt'
+        ]);
+      allow delete: if isVerified() && isValidId(jobId) && (existing().ownerUid == request.auth.uid || isAdmin());
+    }
+
+    match /import_warnings/{warningId} {
+      allow get: if isVerified() && isValidId(warningId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (isBootstrappedAdmin() || resource.data.ownerUid == request.auth.uid);
+      allow create: if isVerified() && isValidId(warningId) && isValidImportWarning(incoming()) && isOwnerDoc(incoming());
+      allow update: if false;
+      allow delete: if isVerified() && isValidId(warningId) && (existing().ownerUid == request.auth.uid || isAdmin());
+    }
+
+    match /sync_runs/{syncId} {
+      allow get: if isVerified() && isValidId(syncId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (isBootstrappedAdmin() || resource.data.ownerUid == request.auth.uid);
+      allow create: if isVerified() && isValidId(syncId) && isValidSyncRun(incoming()) && isOwnerDoc(incoming());
+      allow update: if false;
+      allow delete: if isVerified() && isValidId(syncId) && (existing().ownerUid == request.auth.uid || isAdmin());
+    }
+
+    match /saved_reports/{savedReportId} {
+      allow get: if isVerified() && isValidId(savedReportId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (isBootstrappedAdmin() || resource.data.ownerUid == request.auth.uid);
+      allow create: if isVerified() && isValidId(savedReportId) && isValidSavedReport(incoming()) && isOwnerDoc(incoming());
+      allow update: if false;
+      allow delete: if isVerified() && isValidId(savedReportId) && (existing().ownerUid == request.auth.uid || isAdmin());
+    }
+
+    match /audit_logs/{auditId} {
+      allow get: if isVerified() && isValidId(auditId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (isBootstrappedAdmin() || resource.data.ownerUid == request.auth.uid);
+      allow create: if isVerified() && isValidId(auditId) && isValidAuditLog(incoming()) && isOwnerDoc(incoming());
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}

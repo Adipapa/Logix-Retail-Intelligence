@@ -1,0 +1,303 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Central management user profile registered via Google Sign-In.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "maxLength": 200 },
+        "displayName": { "type": "string", "maxLength": 120 },
+        "role": { "type": "string", "enum": ["management", "admin"], "maxLength": 32 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "role", "createdAt"]
+    },
+    "Station": {
+      "title": "Station",
+      "description": "Logix Retail fuel station master register and Dropbox folder mapping.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "stationId": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "canonicalName": { "type": "string", "maxLength": 80 },
+        "territory": { "type": "string", "maxLength": 80 },
+        "folderPath": { "type": "string", "maxLength": 200 },
+        "aliases": { "type": "array", "description": "Bounded alias list (max 10)." },
+        "activeStatus": { "type": "string", "enum": ["active", "inactive"], "maxLength": 20 },
+        "pumpCount": { "type": "number" },
+        "tankCapacityPms": { "type": "number" },
+        "tankCapacityAgo": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "stationId", "canonicalName", "territory", "folderPath", "aliases", "activeStatus", "pumpCount", "tankCapacityPms", "tankCapacityAgo", "createdAt", "updatedAt"]
+    },
+    "SourceWorkbook": {
+      "title": "SourceWorkbook",
+      "description": "Ingested Excel (.xlsm / .xlsx) monthly station workbook metadata and lineage.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "workbookId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "stationId": { "type": "string", "maxLength": 64 },
+        "stationName": { "type": "string", "maxLength": 80 },
+        "year": { "type": "number" },
+        "month": { "type": "number" },
+        "dropboxFileId": { "type": "string", "maxLength": 120 },
+        "path": { "type": "string", "maxLength": 300 },
+        "revision": { "type": "string", "maxLength": 80 },
+        "fileName": { "type": "string", "maxLength": 160 },
+        "sizeBytes": { "type": "number" },
+        "sheetCount": { "type": "number" },
+        "dailySheetsFound": { "type": "number" },
+        "hasSummarySheet": { "type": "boolean" },
+        "templateVersion": { "type": "string", "maxLength": 40 },
+        "calculationVersion": { "type": "string", "maxLength": 40 },
+        "status": { "type": "string", "enum": ["imported", "warning", "incomplete", "failed"], "maxLength": 24 },
+        "modifiedAt": { "type": "string", "format": "date-time" },
+        "importedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "workbookId", "stationId", "stationName", "year", "month", "dropboxFileId", "path", "revision", "fileName", "sizeBytes", "sheetCount", "dailySheetsFound", "hasSummarySheet", "templateVersion", "calculationVersion", "status", "modifiedAt", "importedAt"]
+    },
+    "DailyReport": {
+      "title": "DailyReport",
+      "description": "Standardised daily operational report extracted from a daily worksheet with full source lineage.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "reportId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "stationId": { "type": "string", "maxLength": 64 },
+        "stationName": { "type": "string", "maxLength": 80 },
+        "territory": { "type": "string", "maxLength": 80 },
+        "workbookId": { "type": "string", "maxLength": 128 },
+        "workbookPath": { "type": "string", "maxLength": 300 },
+        "workbookRevision": { "type": "string", "maxLength": 80 },
+        "worksheetName": { "type": "string", "maxLength": 64 },
+        "reportDate": { "type": "string", "maxLength": 16 },
+        "year": { "type": "number" },
+        "month": { "type": "number" },
+        "weekNumber": { "type": "number" },
+        "weekday": { "type": "string", "maxLength": 16 },
+        "completeness": { "type": "string", "enum": ["imported", "warning", "incomplete", "failed"], "maxLength": 24 },
+        "pmsMorningLitres": { "type": "number" },
+        "pmsAfternoonLitres": { "type": "number" },
+        "pmsNightLitres": { "type": "number" },
+        "pmsTotalLitres": { "type": "number" },
+        "pmsSalesGmd": { "type": "number" },
+        "pmsReturnToTankLitres": { "type": "number" },
+        "pmsCashFuelGmd": { "type": "number" },
+        "agoMorningLitres": { "type": "number" },
+        "agoAfternoonLitres": { "type": "number" },
+        "agoNightLitres": { "type": "number" },
+        "agoTotalLitres": { "type": "number" },
+        "agoSalesGmd": { "type": "number" },
+        "agoReturnToTankLitres": { "type": "number" },
+        "agoCashFuelGmd": { "type": "number" },
+        "totalFuelSalesGmd": { "type": "number" },
+        "pmsOpeningStock": { "type": "number" },
+        "pmsReceipts": { "type": "number" },
+        "pmsTheoreticalStock": { "type": "number" },
+        "pmsClosingStock": { "type": "number" },
+        "pmsStockDiff": { "type": "number" },
+        "pmsStockControlRatio": { "type": "number" },
+        "agoOpeningStock": { "type": "number" },
+        "agoReceipts": { "type": "number" },
+        "agoTheoreticalStock": { "type": "number" },
+        "agoClosingStock": { "type": "number" },
+        "agoStockDiff": { "type": "number" },
+        "agoStockControlRatio": { "type": "number" },
+        "directDeliveryLitres": { "type": "number" },
+        "diversionLitres": { "type": "number" },
+        "diversionDirection": { "type": "string", "maxLength": 120 },
+        "shortageLitres": { "type": "number" },
+        "receivedLitres": { "type": "number" },
+        "deliveryOrigin": { "type": "string", "maxLength": 120 },
+        "deliveryDestination": { "type": "string", "maxLength": 120 },
+        "creditSalesGmd": { "type": "number" },
+        "couponsGmd": { "type": "number" },
+        "qmoneyGmd": { "type": "number" },
+        "waychitGmd": { "type": "number" },
+        "chequesGmd": { "type": "number" },
+        "cashGmd": { "type": "number" },
+        "bankedGmd": { "type": "number" },
+        "reconciliationDiffGmd": { "type": "number" },
+        "generatorRuntimeHrs": { "type": "number" },
+        "generatorRefuelLitres": { "type": "number" },
+        "cashpowerKwh": { "type": "number" },
+        "cashpowerPurchaseGmd": { "type": "number" },
+        "noteText": { "type": "string", "maxLength": 600 },
+        "sourceRowRef": { "type": "string", "maxLength": 80 },
+        "pumpReadings": { "type": "array", "description": "Bounded list of pump meter records (max 16)." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "reportId", "stationId", "stationName", "territory", "workbookId", "workbookPath", "workbookRevision", "worksheetName", "reportDate", "year", "month", "weekNumber", "weekday", "completeness", "pumpReadings", "createdAt", "updatedAt"]
+    },
+    "SummaryReconciliation": {
+      "title": "SummaryReconciliation",
+      "description": "Comparison between daily-derived totals and workbook SUMMARY sheet values.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "reconciliationId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "workbookId": { "type": "string", "maxLength": 128 },
+        "stationId": { "type": "string", "maxLength": 64 },
+        "stationName": { "type": "string", "maxLength": 80 },
+        "year": { "type": "number" },
+        "month": { "type": "number" },
+        "reportDate": { "type": "string", "maxLength": 16 },
+        "fieldName": { "type": "string", "maxLength": 80 },
+        "product": { "type": "string", "enum": ["PMS", "AGO", "GROUP"], "maxLength": 16 },
+        "dailyDerivedValue": { "type": "number" },
+        "summaryValue": { "type": "number" },
+        "variance": { "type": "number" },
+        "tolerance": { "type": "number" },
+        "result": { "type": "string", "enum": ["matched", "within_tolerance", "variance_exceeded", "missing_summary"], "maxLength": 32 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "reconciliationId", "workbookId", "stationId", "stationName", "year", "month", "reportDate", "fieldName", "product", "dailyDerivedValue", "summaryValue", "variance", "tolerance", "result", "createdAt"]
+    },
+    "ImportJob": {
+      "title": "ImportJob",
+      "description": "Execution record for workbook extraction, validation, and commit.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "jobId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "workbookId": { "type": "string", "maxLength": 128 },
+        "fileName": { "type": "string", "maxLength": 160 },
+        "stationName": { "type": "string", "maxLength": 80 },
+        "year": { "type": "number" },
+        "month": { "type": "number" },
+        "status": { "type": "string", "enum": ["completed", "completed_with_warnings", "failed"], "maxLength": 32 },
+        "recordsExtracted": { "type": "number" },
+        "warningsCount": { "type": "number" },
+        "errorsCount": { "type": "number" },
+        "errorSummary": { "type": "string", "maxLength": 400 },
+        "retryCount": { "type": "number" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "jobId", "workbookId", "fileName", "stationName", "year", "month", "status", "recordsExtracted", "warningsCount", "errorsCount", "errorSummary", "retryCount", "startedAt", "completedAt"]
+    },
+    "ImportWarning": {
+      "title": "ImportWarning",
+      "description": "Validation warning, formula notice, or hard error flagged during workbook ingestion.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "warningId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "jobId": { "type": "string", "maxLength": 128 },
+        "workbookId": { "type": "string", "maxLength": 128 },
+        "stationId": { "type": "string", "maxLength": 64 },
+        "stationName": { "type": "string", "maxLength": 80 },
+        "reportDate": { "type": "string", "maxLength": 16 },
+        "worksheet": { "type": "string", "maxLength": 64 },
+        "field": { "type": "string", "maxLength": 64 },
+        "severity": { "type": "string", "enum": ["error", "warning", "info"], "maxLength": 16 },
+        "message": { "type": "string", "maxLength": 400 },
+        "sourceReference": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "warningId", "jobId", "workbookId", "stationId", "stationName", "reportDate", "worksheet", "field", "severity", "message", "sourceReference", "createdAt"]
+    },
+    "SyncRun": {
+      "title": "SyncRun",
+      "description": "Dropbox 15-minute scheduled or management-triggered synchronisation scan record.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "syncId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "triggerType": { "type": "string", "enum": ["scheduled_15m", "manual_admin", "workbook_upload"], "maxLength": 32 },
+        "cursorBefore": { "type": "string", "maxLength": 120 },
+        "cursorAfter": { "type": "string", "maxLength": 120 },
+        "filesSeen": { "type": "number" },
+        "filesQueued": { "type": "number" },
+        "filesSkipped": { "type": "number" },
+        "status": { "type": "string", "enum": ["completed", "partial", "failed"], "maxLength": 24 },
+        "durationMs": { "type": "number" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "syncId", "triggerType", "cursorBefore", "cursorAfter", "filesSeen", "filesQueued", "filesSkipped", "status", "durationMs", "startedAt", "completedAt"]
+    },
+    "SavedReport": {
+      "title": "SavedReport",
+      "description": "Saved management report filter configuration for recurring Excel/PDF export.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "savedReportId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "maxLength": 120 },
+        "stationId": { "type": "string", "maxLength": 64 },
+        "year": { "type": "string", "maxLength": 16 },
+        "month": { "type": "string", "maxLength": 16 },
+        "fuelType": { "type": "string", "enum": ["ALL", "PMS", "AGO"], "maxLength": 12 },
+        "shift": { "type": "string", "enum": ["ALL", "Morning", "Afternoon", "Night"], "maxLength": 20 },
+        "statusFilter": { "type": "string", "maxLength": 24 },
+        "createdByEmail": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "savedReportId", "title", "stationId", "year", "month", "fuelType", "shift", "statusFilter", "createdByEmail", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable management action, export, and ingestion audit trail.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "auditId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "actorEmail": { "type": "string", "maxLength": 200 },
+        "action": { "type": "string", "maxLength": 80 },
+        "entityType": { "type": "string", "maxLength": 64 },
+        "entityId": { "type": "string", "maxLength": 128 },
+        "details": { "type": "string", "maxLength": 400 },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "auditId", "actorEmail", "action", "entityType", "entityId", "details", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Central management user profiles keyed by Firebase Auth UID."
+    },
+    "/stations/{stationId}": {
+      "schema": { "$ref": "#/entities/Station" },
+      "description": "Station master records with Dropbox paths and aliases."
+    },
+    "/source_workbooks/{workbookId}": {
+      "schema": { "$ref": "#/entities/SourceWorkbook" },
+      "description": "Source Excel workbook metadata and Dropbox revision lineage."
+    },
+    "/daily_reports/{reportId}": {
+      "schema": { "$ref": "#/entities/DailyReport" },
+      "description": "Normalised daily operational records extracted from station worksheets."
+    },
+    "/summary_reconciliations/{reconciliationId}": {
+      "schema": { "$ref": "#/entities/SummaryReconciliation" },
+      "description": "Daily-derived vs SUMMARY sheet reconciliation results."
+    },
+    "/import_jobs/{jobId}": {
+      "schema": { "$ref": "#/entities/ImportJob" },
+      "description": "Workbook import execution jobs."
+    },
+    "/import_warnings/{warningId}": {
+      "schema": { "$ref": "#/entities/ImportWarning" },
+      "description": "Validation warnings, formula discrepancies, and missing-date notices."
+    },
+    "/sync_runs/{syncId}": {
+      "schema": { "$ref": "#/entities/SyncRun" },
+      "description": "Scheduled 15-minute and manual Dropbox sync run records."
+    },
+    "/saved_reports/{savedReportId}": {
+      "schema": { "$ref": "#/entities/SavedReport" },
+      "description": "Saved management report filter views."
+    },
+    "/audit_logs/{auditId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Audit log for sign-ins, exports, manual syncs, and workbook imports."
+    }
+  }
+}
