@@ -36,3 +36,13 @@ export async function apiMe(): Promise<ApiUser | null> {
 export function apiLogout() {
   localStorage.removeItem("logix_api_token");
 }
+
+export async function apiDropboxSync(): Promise<{ status: string; files_seen: number; new_or_changed: number; tracked_workbooks: number }> {
+  const token = localStorage.getItem("logix_api_token");
+  const response = await fetch(`${API_BASE}/api/v1/integrations/dropbox/sync`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token || ""}` },
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Dropbox inventory sync failed");
+  return response.json();
+}
