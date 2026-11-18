@@ -57,7 +57,7 @@ interface ShellProps {
   onNavigate: (route: RouteId) => void;
   user: UserProfile;
   isAuthenticated: boolean;
-  onSignIn: () => void;
+  onSignIn: (email: string, password: string) => Promise<void>;
   onSignOut: () => void;
   filters: GlobalFilters;
   onFiltersChange: (next: GlobalFilters) => void;
@@ -84,6 +84,11 @@ export function Shell({
   children,
 }: ShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginBusy, setLoginBusy] = useState(false);
 
   const groups: Array<NavItem['group']> = ['Operations', 'Control & Finance', 'Analytics & Sync'];
 
@@ -126,6 +131,33 @@ export function Shell({
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* Desktop Fixed Sidebar */}
+      {showLogin && (
+        <div className="fixed inset-0 z-[80] bg-slate-950/50 flex items-center justify-center p-4">
+          <form className="w-full max-w-sm bg-white rounded-xl shadow-xl p-6 space-y-4"
+            onSubmit={async (event) => {
+              event.preventDefault(); setLoginBusy(true); setLoginError(null);
+              try { await onSignIn(loginEmail, loginPassword); setShowLogin(false); setLoginPassword(''); }
+              catch (error) { setLoginError(error instanceof Error ? error.message : 'Unable to sign in.'); }
+              finally { setLoginBusy(false); }
+            }}>
+            <div><h2 className="text-lg font-semibold text-slate-900">Central management sign in</h2>
+              <p className="text-xs text-slate-500 mt-1">Use the account created by the system administrator.</p></div>
+            <label className="block text-xs font-medium text-slate-700">Email
+              <input required type="email" autoComplete="username" value={loginEmail}
+                onChange={(event) => setLoginEmail(event.target.value)}
+                className="mt-1 w-full h-10 px-3 border border-slate-300 rounded-md text-sm" /></label>
+            <label className="block text-xs font-medium text-slate-700">Password
+              <input required type="password" autoComplete="current-password" value={loginPassword}
+                onChange={(event) => setLoginPassword(event.target.value)}
+                className="mt-1 w-full h-10 px-3 border border-slate-300 rounded-md text-sm" /></label>
+            {loginError && <p role="alert" className="text-xs text-red-700">{loginError}</p>}
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowLogin(false)} className="px-3 py-2 text-xs border border-slate-200 rounded-md">Cancel</button>
+              <button disabled={loginBusy} type="submit" className="px-3 py-2 text-xs text-white bg-slate-900 rounded-md disabled:opacity-50">{loginBusy ? 'Signing in…' : 'Sign in'}</button>
+            </div>
+          </form>
+        </div>
+      )}
       <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-white border-r border-slate-200 z-30">
         <div className="h-14 px-5 border-b border-slate-200 flex items-center gap-2.5">
           <BarChart3 className="w-5 h-5 text-blue-700 shrink-0" aria-hidden="true" />
@@ -136,7 +168,7 @@ export function Shell({
         {renderNav()}
         <div className="p-4 border-t border-slate-200 text-xs text-slate-500 space-y-1">
           <div className="font-medium text-slate-700">
-            {isAuthenticated ? 'Central Management' : 'Central Management (Local)'}
+            {isAuthenticated ? 'Central Management' : 'Central Management (Preview)'}
           </div>
           <div className="truncate">
             {isAuthenticated ? user.email : 'Sign in anytime for cloud sync'}
@@ -215,10 +247,10 @@ export function Shell({
             ) : (
               <button
                 type="button"
-                onClick={onSignIn}
+                onClick={() => { setLoginError(null); setShowLogin(true); }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-slate-900 rounded-md hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
-                <span>Sign in with Google</span>
+                <span>Sign in</span>
               </button>
             )}
           </div>
