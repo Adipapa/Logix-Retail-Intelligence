@@ -16,7 +16,7 @@ router = APIRouter(prefix="/integrations/dropbox", tags=["Dropbox"])
 def status(_: User = Depends(get_current_user), db: Session = Depends(get_db)):
     state = db.scalar(select(DropboxSyncState).where(DropboxSyncState.state_key == "primary"))
     return {
-        "configured": bool(settings.dropbox_access_token),
+        "configured": bool(settings.dropbox_refresh_token and settings.dropbox_app_key and settings.dropbox_app_secret) or bool(settings.dropbox_access_token),
         "root_path": settings.dropbox_root_path or "/",
         "last_sync_at": state.last_sync_at.isoformat() if state and state.last_sync_at else None,
         "last_status": state.last_status if state else "never",
