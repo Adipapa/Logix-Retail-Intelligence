@@ -12,7 +12,7 @@ def _json_value(value):
     return str(value)
 
 def parse_sheet_date(name: str, fallback_year=None, fallback_month=None):
-    match = re.match(r"^\\s*(\\d{1,2})\\s+([A-Z]{3,9})\\s+(\\d{2,4})\\s*$", name, re.I)
+    match = re.match(r"^\s*(\d{1,2})\s+([A-Z]{3,9})\s+(\d{2,4})\s*$", name, re.I)
     if not match: return None
     day, token, year_token = match.groups()
     month = MONTHS.get(token[:3].upper(), fallback_month)
@@ -25,7 +25,7 @@ def parse_sheet_date(name: str, fallback_year=None, fallback_month=None):
 def identify_path(path: str):
     parts = [p for p in PurePosixPath(path).parts if p not in ("/", "")]
     filename = parts[-1] if parts else path
-    year = next((int(p) for p in parts if re.fullmatch(r"20\\d{2}", p)), None)
+    year = next((int(p) for p in parts if re.fullmatch(r"20\d{2}", p)), None)
     month = next((MONTHS[p[:3].upper()] for p in parts if p[:3].upper() in MONTHS), None)
     station = parts[1] if len(parts)>1 and parts[0].lower()=="logix retail" else (parts[0] if len(parts)>1 else None)
     return {"file_name":filename,"station_name":station,"year":year,"month":month}
