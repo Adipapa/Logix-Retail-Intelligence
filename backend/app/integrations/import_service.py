@@ -21,7 +21,7 @@ def import_workbook_bytes(db: Session, *, dropbox_file_id: str, revision: str, p
         record=db.scalar(select(DailyReport).where(DailyReport.source_workbook_id==source.id,DailyReport.report_date==report_date))
         values=dict(source_workbook_id=source.id,source_revision=revision,station_name=ident["station_name"] or "Unresolved station",
             report_date=report_date,worksheet_name=item["worksheet"],template_version="unmapped",completeness="raw_only",
-            raw_cells=item["cells"],extracted_data={},source_reference=f"{ident['file_name']} [{item['worksheet']}]")
+            raw_cells=item["cells"],extracted_data=item.get("extracted_data",{}),source_reference=f"{ident['file_name']} [{item['worksheet']}]")
         if record is None: db.add(DailyReport(**values))
         else:
             for key,value in values.items(): setattr(record,key,value)
