@@ -19,7 +19,10 @@ def get_client() -> dropbox.Dropbox:
     )
 
 def is_supported_workbook(name: str) -> bool:
-    return name.lower().endswith((".xlsx", ".xlsm"))
+    normalized_name = name.casefold()
+    if "conflicted copy" in normalized_name:
+        return False
+    return normalized_name.endswith((".xlsx", ".xlsm"))
 
 def entry_to_record(entry: FileMetadata) -> dict:
     return {
