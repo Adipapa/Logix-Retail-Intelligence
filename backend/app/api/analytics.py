@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.database.session import get_db
-from app.models.operations import DailyReport, ImportWarning, SourceWorkbook
+from app.models.operations import DailyReport, ImportJob, ImportWarning, SourceWorkbook
 from app.models.user import User
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -85,10 +85,7 @@ def overview(
     stations.sort(key=lambda item: item["revenue_gmd"] or 0, reverse=True)
 
     warning_count = db.query(ImportWarning).join(
-        # warnings are linked to import jobs, not directly to reports; count all
-        # persisted validation warnings until a date-aware warning relation exists.
-        __import__("app.models.operations", fromlist=["ImportJob"]).ImportJob,
-        ImportWarning.import_job_id == __import__("app.models.operations", fromlist=["ImportJob"]).ImportJob.id,
+        ImportJob, ImportWarning.import_job_id == ImportJob.id
     ).count()
 
     return {
