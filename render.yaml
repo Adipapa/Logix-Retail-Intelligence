@@ -24,11 +24,10 @@ services:
           property: connectionString
       - key: SECRET_KEY
         generateValue: true
+      # The static-site slug follows its Render service name. Confirm the assigned URL
+      # after the first Blueprint sync and update this value if Render changes the slug.
       - key: CORS_ORIGINS
-        fromService:
-          name: logix-retail-frontend
-          type: web
-          envVarKey: RENDER_EXTERNAL_URL
+        value: https://logix-retail-frontend.onrender.com
       - key: BOOTSTRAP_ADMIN_EMAIL
         sync: false
       - key: BOOTSTRAP_ADMIN_PASSWORD
