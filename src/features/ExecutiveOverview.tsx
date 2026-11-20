@@ -2,6 +2,7 @@ import { AlertTriangle, ArrowUpRight } from 'lucide-react';
 import { FuelComparisonChart, StationComparisonBars, type StationBarDatum } from '../components/Charts';
 import { StatusLabel } from '../components/StatusLabel';
 import { formatGmd, formatLitres, formatNumber, sumNullable } from '../lib/formatters';
+import type { LiveAnalyticsOverview } from '../services/api';
 import type {
   DailyReport,
   ImportWarning,
@@ -20,6 +21,8 @@ interface ExecutiveOverviewProps {
   onInspectReport: (report: DailyReport) => void;
   onSelectStation: (stationId: string) => void;
   onNavigate: (route: RouteId) => void;
+  liveAnalytics?: LiveAnalyticsOverview | null;
+  liveAnalyticsError?: string | null;
 }
 
 function KpiCard({ label, value, detail, tone = 'slate' }: {
@@ -49,6 +52,8 @@ export function ExecutiveOverview({
   onInspectReport,
   onSelectStation,
   onNavigate,
+  liveAnalytics,
+  liveAnalyticsError,
 }: ExecutiveOverviewProps) {
   const totalSalesGmd = sumNullable(reports.map((r) => r.totalFuelSalesGmd));
   const totalPmsLitres = sumNullable(reports.map((r) => r.pmsTotalLitres));
@@ -140,6 +145,38 @@ export function ExecutiveOverview({
           <div>{stations.length} stations configured · {workbooks.length} workbooks</div>
         </div>
       </section>
+
+      {liveAnalyticsError && (
+        <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+          Live PostgreSQL analytics could not be loaded: {liveAnalyticsError}
+        </section>
+      )}
+      {liveAnalytics && (
+        <section className="rounded-lg border border-blue-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-blue-800">Live PostgreSQL data</div>
+              <p className="mt-1 text-xs text-slate-600">
+                {liveAnalytics.data_status === 'verified_extraction_available'
+                  ? 'Verified mapped workbook extraction is available. These figures are separate from the demonstration dashboard below.'
+                  : 'No verified mapped workbook extraction is available yet. Raw workbook records are not presented as sales figures.'}
+              </p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-700">
+              {liveAnalytics.records.mapped} mapped / {liveAnalytics.records.total} records
+            </span>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div><div className="text-[11px] text-slate-500">Verified revenue</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatGmd(liveAnalytics.kpis.revenue_gmd)}</div></div>
+            <div><div className="text-[11px] text-slate-500">PMS volume</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatLitres(liveAnalytics.kpis.pms_litres)}</div></div>
+            <div><div className="text-[11px] text-slate-500">AGO volume</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatLitres(liveAnalytics.kpis.ago_litres)}</div></div>
+            <div><div className="text-[11px] text-slate-500">Raw / unmapped</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatNumber(liveAnalytics.records.raw_or_unmapped)}</div></div>
+          </div>
+          <div className="mt-3 text-[11px] text-slate-500">
+            Database validation warnings: {liveAnalytics.validation_warning_count}. Live figures only include supported mapped templates.
+          </div>
+        </section>
+      )}
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="Fuel sales revenue" value={formatGmd(totalSalesGmd)}
