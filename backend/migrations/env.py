@@ -9,7 +9,7 @@ import app.models  # Register every model before Alembic reads Base.metadata.
 
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.sqlalchemy_database_url)
+config.set_main_option("sqlalchemy.url", settings.sqlalchemy_database_url.replace("%", "%%"))
 
 if config.config_file_name:
     fileConfig(config.config_file_name)
