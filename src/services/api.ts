@@ -57,7 +57,7 @@ export async function apiDropboxSync(): Promise<{
 
 
 export interface LiveAnalyticsOverview {
-  data_status: "verified_extraction_available" | "no_verified_extractions";
+  data_status: "mapped_extraction_available" | "no_mapped_extractions";
   period: { year: number | null; month: number | null; station: string | null };
   records: { total: number; mapped: number; raw_or_unmapped: number };
   kpis: {
