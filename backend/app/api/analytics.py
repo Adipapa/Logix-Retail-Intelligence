@@ -89,7 +89,7 @@ def overview(
     ).count()
 
     return {
-        "data_status": "verified_extraction_available" if mapped else "no_verified_extractions",
+        "data_status": "mapped_extraction_available" if mapped else "no_mapped_extractions",
         "period": {"year": year, "month": month, "station": station},
         "records": {"total": len(records), "mapped": len(mapped), "raw_or_unmapped": len(records) - len(mapped)},
         "kpis": {
