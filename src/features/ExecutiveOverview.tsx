@@ -193,7 +193,7 @@ export function ExecutiveOverview({
           tone={cashAlerts.length ? 'red' : 'slate'} />
         <KpiCard label="Stock variance exposure" value={formatLitres(stockVarianceExposure)}
           detail={`Delivery shortages recorded: ${formatLitres(deliveryShortage)}`}
-          tone={stockAlerts.length || deliveryShortage > 0 ? 'amber' : 'slate'} />
+          tone={stockAlerts.length || (deliveryShortage != null && deliveryShortage > 0) ? 'amber' : 'slate'} />
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
