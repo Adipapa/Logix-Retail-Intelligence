@@ -162,9 +162,9 @@ export function ExecutiveOverview({
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide text-blue-800">Live PostgreSQL data</div>
               <p className="mt-1 text-xs text-slate-600">
-                {liveAnalytics.data_status === 'verified_extraction_available'
-                  ? 'Verified mapped workbook extraction is available. These figures are separate from the demonstration dashboard below.'
-                  : 'No verified mapped workbook extraction is available yet. Raw workbook records are not presented as sales figures.'}
+                {liveAnalytics.data_status === 'mapped_extraction_available'
+                  ? 'Mapped workbook extraction is available. Review validation warnings before relying on totals; these figures are separate from the demonstration dashboard below.'
+                  : 'No supported workbook mapping is available yet. Raw workbook records are not presented as sales figures.'}
               </p>
             </div>
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-700">
@@ -172,13 +172,13 @@ export function ExecutiveOverview({
             </span>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <div><div className="text-[11px] text-slate-500">Verified revenue</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatGmd(liveAnalytics.kpis.revenue_gmd)}</div></div>
+            <div><div className="text-[11px] text-slate-500">Mapped revenue</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatGmd(liveAnalytics.kpis.revenue_gmd)}</div></div>
             <div><div className="text-[11px] text-slate-500">PMS volume</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatLitres(liveAnalytics.kpis.pms_litres)}</div></div>
             <div><div className="text-[11px] text-slate-500">AGO volume</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatLitres(liveAnalytics.kpis.ago_litres)}</div></div>
             <div><div className="text-[11px] text-slate-500">Raw / unmapped</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatNumber(liveAnalytics.records.raw_or_unmapped)}</div></div>
           </div>
           <div className="mt-3 text-[11px] text-slate-500">
-            Database validation warnings: {liveAnalytics.validation_warning_count}. Live figures only include supported mapped templates.
+            Database validation warnings: {liveAnalytics.validation_warning_count}. Live figures only include records with a supported template mapping.
           </div>
         </section>
       )}
