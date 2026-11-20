@@ -7,7 +7,6 @@ from app.core.config import settings
 from app.models.integration import DropboxFile, DropboxSyncState
 from app.integrations.dropbox_client import scan_folder, reset_cursor
 from app.integrations.dropbox_import_queue import process_pending_workbooks
-from app.integrations.dropbox_import_queue import process_pending_workbooks
 
 _scheduler = BackgroundScheduler(timezone="UTC")
 
