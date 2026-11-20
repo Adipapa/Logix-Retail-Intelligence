@@ -171,11 +171,13 @@ export function ExecutiveOverview({
               {liveAnalytics.records.mapped} mapped / {liveAnalytics.records.total} records
             </span>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
             <div><div className="text-[11px] text-slate-500">Mapped revenue</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatGmd(liveAnalytics.kpis.revenue_gmd)}</div></div>
             <div><div className="text-[11px] text-slate-500">PMS volume</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatLitres(liveAnalytics.kpis.pms_litres)}</div></div>
             <div><div className="text-[11px] text-slate-500">AGO volume</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatLitres(liveAnalytics.kpis.ago_litres)}</div></div>
-            <div><div className="text-[11px] text-slate-500">Raw / unmapped</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatNumber(liveAnalytics.records.raw_or_unmapped)}</div></div>
+            <div><div className="text-[11px] text-slate-500">Cash reconciliation difference</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatGmd(liveAnalytics.kpis.cash_reconciliation_difference_gmd)}</div></div>
+            <div><div className="text-[11px] text-slate-500">PMS stock difference</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatLitres(liveAnalytics.kpis.pms_stock_difference_litres)}</div></div>
+            <div><div className="text-[11px] text-slate-500">AGO stock difference</div><div className="mt-1 text-base font-semibold font-mono text-slate-950">{formatLitres(liveAnalytics.kpis.ago_stock_difference_litres)}</div></div>
           </div>
           <div className="mt-3 text-[11px] text-slate-500">
             Database validation warnings: {liveAnalytics.validation_warning_count}. Live figures only include records with a supported template mapping.
