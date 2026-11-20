@@ -1,7 +1,9 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
     app_name: str = "Logix Retail Intelligence API"
     app_env: str = "development"
     api_v1_prefix: str = "/api/v1"
@@ -19,7 +21,18 @@ class Settings(BaseSettings):
     dropbox_root_path: str = "/Logix Retail"
 
     @property
+    def sqlalchemy_database_url(self) -> str:
+        """Use the installed psycopg 3 driver for PostgreSQL URLs."""
+        url = self.database_url
+        if url.startswith("postgres://"):
+            return url.replace("postgres://", "postgresql+psycopg://", 1)
+        if url.startswith("postgresql://"):
+            return url.replace("postgresql://", "postgresql+psycopg://", 1)
+        return url
+
+    @property
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+
 
 settings = Settings()
