@@ -24,7 +24,7 @@ import {
   type WorkspaceData,
 } from './services/workspaceRepository';
 import { buildHistoricalSeedDataset } from './services/seedData';
-import { apiLogin, apiMe, apiLogout, apiDropboxSync } from './services/api';
+import { apiLogin, apiMe, apiLogout, apiDropboxSync, apiAnalyticsOverview, type LiveAnalyticsOverview } from './services/api';
 import { parseExcelWorkbook } from './services/workbookEngine';
 import type {
   DailyReport,
@@ -90,6 +90,8 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(PREVIEW_USER);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [liveAnalytics, setLiveAnalytics] = useState<LiveAnalyticsOverview | null>(null);
+  const [liveAnalyticsError, setLiveAnalyticsError] = useState<string | null>(null);
 
   const [workspace, setWorkspace] = useState<WorkspaceData>(() => buildLocalPreviewWorkspace());
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
@@ -187,6 +189,31 @@ export default function App() {
     setIsAuthenticated(false);
     setUserProfile(PREVIEW_USER);
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setLiveAnalytics(null);
+      setLiveAnalyticsError(null);
+      return;
+    }
+    let active = true;
+    const stationName = filters.stationId === 'ALL'
+      ? undefined
+      : workspace.stations.find((station) => station.stationId === filters.stationId)?.canonicalName;
+    apiAnalyticsOverview({
+      year: filters.year,
+      month: filters.month,
+      station: stationName,
+    }).then((data) => {
+      if (active) {
+        setLiveAnalytics(data);
+        setLiveAnalyticsError(null);
+      }
+    }).catch((err) => {
+      if (active) setLiveAnalyticsError(err instanceof Error ? err.message : 'Live analytics unavailable.');
+    });
+    return () => { active = false; };
+  }, [isAuthenticated, filters.year, filters.month, filters.stationId, workspace.stations]);
 
   const years = useMemo(() => {
     const set = new Set(workspace.dailyReports.map((r) => r.year));
@@ -416,6 +443,8 @@ export default function App() {
             onInspectReport={setInspectedReport}
             onSelectStation={(id) => navigate('station-detail', id)}
             onNavigate={(r) => navigate(r, null)}
+            liveAnalytics={liveAnalytics}
+            liveAnalyticsError={liveAnalyticsError}
           />
         )}
 
