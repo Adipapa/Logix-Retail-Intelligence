@@ -37,7 +37,15 @@ export function apiLogout() {
   localStorage.removeItem("logix_api_token");
 }
 
-export async function apiDropboxSync(): Promise<{ status: string; files_seen: number; new_or_changed: number; tracked_workbooks: number }> {
+export async function apiDropboxSync(): Promise<{
+  status: string;
+  files_seen: number;
+  new_or_changed: number;
+  tracked_workbooks: number;
+  imports_attempted?: number;
+  imports_succeeded?: number;
+  imports_failed?: number;
+}> {
   const token = localStorage.getItem("logix_api_token");
   const response = await fetch(`${API_BASE}/api/v1/integrations/dropbox/sync`, {
     method: "POST",
