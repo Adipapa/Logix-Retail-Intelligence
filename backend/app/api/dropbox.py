@@ -60,8 +60,13 @@ def sync_now(_: User = Depends(require_admin), db: Session = Depends(get_db)):
         state.last_status = "completed"
         state.last_error = None
         db.commit()
+        import_results = process_pending_workbooks(db)
         return {"status": "completed", "files_seen": len(records), "new_or_changed": changed,
-                "tracked_workbooks": db.query(DropboxFile).count(), "last_sync_at": state.last_sync_at.isoformat()}
+                "tracked_workbooks": db.query(DropboxFile).count(), "last_sync_at": state.last_sync_at.isoformat(),
+                "imports_attempted": len(import_results),
+                "imports_succeeded": sum(1 for item in import_results if item.get("status") == "imported"),
+                "imports_failed": sum(1 for item in import_results if item.get("status") == "failed"),
+                "import_results": import_results}
     except DropboxNotConfigured as exc:
         db.rollback()
         raise HTTPException(status_code=503, detail=str(exc))
