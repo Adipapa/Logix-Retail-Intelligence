@@ -25,6 +25,11 @@ interface ExecutiveOverviewProps {
   liveAnalyticsError?: string | null;
 }
 
+function sumKnown(values: Array<number | null | undefined>): number | null {
+  const present = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  return present.length ? present.reduce((total, value) => total + value, 0) : null;
+}
+
 function KpiCard({ label, value, detail, tone = 'slate' }: {
   label: string; value: string; detail: string; tone?: 'slate' | 'teal' | 'amber' | 'red';
 }) {
@@ -55,19 +60,19 @@ export function ExecutiveOverview({
   liveAnalytics,
   liveAnalyticsError,
 }: ExecutiveOverviewProps) {
-  const totalSalesGmd = sumNullable(reports.map((r) => r.totalFuelSalesGmd));
-  const totalPmsLitres = sumNullable(reports.map((r) => r.pmsTotalLitres));
-  const totalAgoLitres = sumNullable(reports.map((r) => r.agoTotalLitres));
-  const totalLitres = totalPmsLitres + totalAgoLitres;
-  const bankedGmd = sumNullable(reports.map((r) => r.bankedGmd));
-  const cashVarianceExposure = sumNullable(reports.map((r) =>
+  const totalSalesGmd = sumKnown(reports.map((r) => r.totalFuelSalesGmd));
+  const totalPmsLitres = sumKnown(reports.map((r) => r.pmsTotalLitres));
+  const totalAgoLitres = sumKnown(reports.map((r) => r.agoTotalLitres));
+  const totalLitres = sumKnown([totalPmsLitres, totalAgoLitres]);
+  const bankedGmd = sumKnown(reports.map((r) => r.bankedGmd));
+  const cashVarianceExposure = sumKnown(reports.map((r) =>
     r.reconciliationDiffGmd == null ? null : Math.abs(r.reconciliationDiffGmd)
   ));
-  const stockVarianceExposure = sumNullable(reports.flatMap((r) => [
+  const stockVarianceExposure = sumKnown(reports.flatMap((r) => [
     r.pmsStockDiff == null ? null : Math.abs(r.pmsStockDiff),
     r.agoStockDiff == null ? null : Math.abs(r.agoStockDiff),
   ]));
-  const deliveryShortage = sumNullable(reports.map((r) => r.shortageLitres));
+  const deliveryShortage = sumKnown(reports.map((r) => r.shortageLitres));
   const importedCount = reports.filter((r) => r.completeness === 'imported').length;
   const coveragePct = reports.length ? (importedCount / reports.length) * 100 : 0;
   const activeExceptions = warnings.filter((w) => w.severity !== 'info');
