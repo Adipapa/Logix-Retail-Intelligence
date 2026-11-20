@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.models.integration import DropboxFile, DropboxSyncState
 from app.integrations.dropbox_client import scan_folder, reset_cursor
 from app.integrations.dropbox_import_queue import process_pending_workbooks
+from app.integrations.dropbox_import_queue import process_pending_workbooks
 
 _scheduler = BackgroundScheduler(timezone="UTC")
 
@@ -42,6 +43,7 @@ def run_scheduled_inventory():
             state.last_status = "completed"
             state.last_error = None
             db.commit()
+            process_pending_workbooks(db)
         except Exception as exc:
             db.rollback()
             state = db.scalar(select(DropboxSyncState).where(DropboxSyncState.state_key == "primary"))
