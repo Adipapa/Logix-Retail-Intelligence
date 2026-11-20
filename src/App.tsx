@@ -261,7 +261,7 @@ export default function App() {
     }
     try {
       const result = await apiDropboxSync();
-      setAuthNotice(`Dropbox inventory scan completed: ${result.files_seen} workbooks checked; ${result.new_or_changed} new or revised; ${result.tracked_workbooks} tracked. Workbook values have not yet been imported into PostgreSQL.`);
+      setAuthNotice(`Dropbox sync completed: ${result.files_seen} files checked; ${result.new_or_changed} new or revised; ${result.tracked_workbooks} tracked. Extraction attempted: ${result.imports_attempted ?? 0}; succeeded: ${result.imports_succeeded ?? 0}; failed: ${result.imports_failed ?? 0}. Review the Data Monitor for file-level results.`);
     } catch (err) {
       setAuthNotice(err instanceof Error ? err.message : 'Dropbox sync failed.');
     }
