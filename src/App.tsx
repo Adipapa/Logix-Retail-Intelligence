@@ -411,7 +411,7 @@ export default function App() {
         showGlobalFilters={!hideGlobalFilters}
       >
         <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900">
-          <strong>Preview environment:</strong> dashboard figures are sample/demo data. Dropbox sync currently inventories workbook files only; extraction into PostgreSQL and reconciliation are not yet enabled.
+          <strong>Preview environment:</strong> the main dashboard figures are sample/demo data. Dropbox sync now queues workbook extraction into PostgreSQL, but only the currently supported Sukuta template is mapped; other workbook sheets remain raw/unmapped. Summary reconciliation is not yet implemented.
         </div>
 
         {authNotice && (
