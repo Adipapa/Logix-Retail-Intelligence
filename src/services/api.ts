@@ -46,3 +46,53 @@ export async function apiDropboxSync(): Promise<{ status: string; files_seen: nu
   if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Dropbox inventory sync failed");
   return response.json();
 }
+
+
+export interface LiveAnalyticsOverview {
+  data_status: "verified_extraction_available" | "no_verified_extractions";
+  period: { year: number | null; month: number | null; station: string | null };
+  records: { total: number; mapped: number; raw_or_unmapped: number };
+  kpis: {
+    revenue_gmd: number | null;
+    pms_litres: number | null;
+    ago_litres: number | null;
+    cash_reconciliation_difference_gmd: number | null;
+    pms_stock_difference_litres: number | null;
+    ago_stock_difference_litres: number | null;
+  };
+  stations: Array<{
+    station_name: string;
+    report_count: number;
+    pms_litres: number | null;
+    ago_litres: number | null;
+    revenue_gmd: number | null;
+  }>;
+  validation_warning_count: number;
+  recent_reports: Array<{
+    report_date: string;
+    station_name: string;
+    worksheet_name: string;
+    completeness: string;
+    source_reference: string;
+    mapped: boolean;
+  }>;
+}
+
+export async function apiAnalyticsOverview(filters: {
+  year?: string;
+  month?: string;
+  station?: string;
+} = {}): Promise<LiveAnalyticsOverview> {
+  const token = localStorage.getItem("logix_api_token");
+  if (!token) throw new Error("Sign in to view live PostgreSQL analytics.");
+  const params = new URLSearchParams();
+  if (filters.year && filters.year !== "ALL") params.set("year", filters.year);
+  if (filters.month && filters.month !== "ALL" && filters.year && filters.year !== "ALL") params.set("month", filters.month);
+  if (filters.station && filters.station !== "ALL") params.set("station", filters.station);
+  const query = params.toString();
+  const response = await fetch(`${API_BASE}/api/v1/analytics/overview${query ? `?${query}` : ""}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Unable to load live analytics.");
+  return response.json();
+}
