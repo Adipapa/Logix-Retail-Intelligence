@@ -25,7 +25,7 @@ import {
   type WorkspaceData,
 } from './services/workspaceRepository';
 import { buildHistoricalSeedDataset } from './services/seedData';
-import { apiLogin, apiLogout, apiDropboxSync, apiAnalyticsOverview, type LiveAnalyticsOverview } from './services/api';
+import { apiLogin, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionReports, type LiveAnalyticsOverview, type ProductionReportsResponse } from './services/api';
 import { parseExcelWorkbook } from './services/workbookEngine';
 import type {
   DailyReport,
@@ -84,6 +84,8 @@ export default function App() {
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [liveAnalytics, setLiveAnalytics] = useState<LiveAnalyticsOverview | null>(null);
   const [liveAnalyticsError, setLiveAnalyticsError] = useState<string | null>(null);
+  const [productionData, setProductionData] = useState<ProductionReportsResponse | null>(null);
+  const [productionDataError, setProductionDataError] = useState<string | null>(null);
 
   const [workspace, setWorkspace] = useState<WorkspaceData>(() => emptyWorkspace());
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
@@ -103,21 +105,21 @@ export default function App() {
     search: '',
   });
 
-  // The production analytics API is the source of station options while the legacy workspace is not connected.
-  const productionStations = useMemo<Station[]>(() => (liveAnalytics?.stations ?? []).map((station) => ({
+  // Canonical production station options are deduplicated case-insensitively by the API.
+  const productionStations = useMemo<Station[]>(() => (productionData?.stations ?? []).map((station) => ({
     ownerUid: '',
-    stationId: station.station_name,
-    canonicalName: station.station_name,
-    territory: '',
+    stationId: station.stationId,
+    canonicalName: station.canonicalName,
+    territory: station.territory,
     folderPath: '',
-    aliases: [station.station_name],
+    aliases: [station.canonicalName],
     activeStatus: 'active',
     pumpCount: 0,
     tankCapacityPms: 0,
     tankCapacityAgo: 0,
     createdAt: '',
     updatedAt: '',
-  })), [liveAnalytics]);
+  })), [productionData]);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -186,35 +188,38 @@ export default function App() {
     if (!isAuthenticated) {
       setLiveAnalytics(null);
       setLiveAnalyticsError(null);
+      setProductionData(null);
+      setProductionDataError(null);
       return;
     }
     let active = true;
     const stationName = filters.stationId === 'ALL'
       ? undefined
       : productionStations.find((station) => station.stationId === filters.stationId)?.canonicalName;
-    apiAnalyticsOverview({
-      year: filters.year,
-      month: filters.month,
-      station: stationName,
-    }).then((data) => {
+    Promise.all([
+      apiAnalyticsOverview({ year: filters.year, month: filters.month, station: stationName }),
+      apiProductionReports({ year: filters.year, month: filters.month, station: stationName }),
+    ]).then(([analytics, production]) => {
       if (active) {
-        setLiveAnalytics(data);
+        setLiveAnalytics(analytics);
         setLiveAnalyticsError(null);
+        setProductionData(production);
+        setProductionDataError(null);
       }
     }).catch((err) => {
-      if (active) setLiveAnalyticsError(err instanceof Error ? err.message : 'Live analytics unavailable.');
+      if (active) {
+        setLiveAnalyticsError(err instanceof Error ? err.message : 'Live analytics unavailable.');
+        setProductionDataError(err instanceof Error ? err.message : 'Production reports unavailable.');
+      }
     });
     return () => { active = false; };
-  }, [isAuthenticated, filters.year, filters.month, filters.stationId, workspace.stations]);
+  }, [isAuthenticated, filters.year, filters.month, filters.stationId, productionData?.stations]);
 
-  const years = useMemo(() => {
-    const set = new Set(workspace.dailyReports.map((r) => r.year));
-    return Array.from(set).sort((a, b) => a - b);
-  }, [workspace]);
+  const years = productionData?.years ?? [];
 
   const filteredReports = useMemo(() => {
     const searchLower = filters.search.trim().toLowerCase();
-    return workspace.dailyReports.filter((r) => {
+    return (productionData?.reports ?? []).filter((r) => {
       if (filters.stationId !== 'ALL' && r.stationId !== filters.stationId) return false;
       if (filters.year !== 'ALL' && String(r.year) !== filters.year) return false;
       if (filters.month !== 'ALL' && String(r.month) !== filters.month) return false;
@@ -225,7 +230,7 @@ export default function App() {
       }
       return true;
     });
-  }, [workspace, filters]);
+  }, [productionData, filters]);
 
   const filteredWarnings = useMemo(() => {
     return workspace.importWarnings.filter((w) => {
@@ -425,16 +430,16 @@ export default function App() {
           </div>
         )}
 
-        {activeRoute !== 'dashboard' && (
+        {productionDataError && activeRoute !== 'dashboard' && (
           <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900">
-            This section is not yet connected to production PostgreSQL reporting. It is intentionally not populated with demonstration data. The Executive Overview currently displays live database analytics.
+            Production report data could not be loaded: {productionDataError}
           </div>
         )}
 
         {activeRoute === 'dashboard' && (
           <ExecutiveOverview
             reports={filteredReports}
-            stations={workspace.stations}
+            stations={productionStations}
             workbooks={workspace.workbooks}
             warnings={filteredWarnings}
             reconciliations={filteredReconciliations}
@@ -448,7 +453,7 @@ export default function App() {
 
         {(activeRoute === 'stations' || activeRoute === 'station-detail') && (
           <StationsView
-            stations={workspace.stations}
+            stations={productionStations}
             reports={filteredReports}
             workbooks={workspace.workbooks}
             selectedStationId={selectedStationId}
@@ -497,8 +502,8 @@ export default function App() {
 
         {activeRoute === 'historical' && (
           <HistoricalAnalyticsView
-            allReports={workspace.dailyReports}
-            stations={workspace.stations}
+            allReports={productionData?.reports ?? []}
+            stations={productionStations}
             selectedStationId={filters.stationId}
           />
         )}
