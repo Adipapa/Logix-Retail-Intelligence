@@ -1,6 +1,7 @@
 from datetime import date
+
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -10,10 +11,6 @@ from app.models.user import User
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
-# Each shift has two fuel-meter columns (PMS and AGO). A value counts as
-# entered only when the source cell contains a numeric value, not a formula
-# result. This preserves the distinction between a real entered zero and a
-# blank cell whose spreadsheet formula happens to calculate to zero.
 SHIFT_INPUT_COLUMNS = {
     "morning": ("D", "E"),
     "afternoon": ("F", "G"),
@@ -26,11 +23,6 @@ def _number(value):
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
-def _sum_present(values):
-    present = [value for value in values if value is not None]
-    return round(sum(present), 2) if present else None
-
-
 def _shift_entry_status(raw_cells):
     raw_cells = raw_cells or {}
     status = {}
@@ -39,8 +31,7 @@ def _shift_entry_status(raw_cells):
         for column in columns:
             for row in PUMP_ROWS:
                 cell = raw_cells.get(f"{column}{row}") or {}
-                value = cell.get("value")
-                if "formula" not in cell and _number(value) is not None:
+                if "formula" not in cell and _number(cell.get("value")) is not None:
                     entered = True
                     break
             if entered:
@@ -49,14 +40,16 @@ def _shift_entry_status(raw_cells):
     return status
 
 
-@router.get("/overview")
-def overview(
-    year: int | None = Query(default=None, ge=2000, le=2100),
-    month: int | None = Query(default=None, ge=1, le=12),
-    station: str | None = Query(default=None, min_length=1, max_length=160),
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
-):
+def _add(total, value):
+    number = _number(value)
+    return total if number is None else total + number
+
+
+def _nullable(total, count):
+    return round(total, 2) if count else None
+
+
+def _base_statement(year, month, station):
     statement = select(DailyReport).join(
         SourceWorkbook, DailyReport.source_workbook_id == SourceWorkbook.id
     )
@@ -69,112 +62,171 @@ def overview(
             statement = statement.where(DailyReport.report_date < date(year + 1, 1, 1))
     if station:
         statement = statement.where(DailyReport.station_name.ilike(station))
-    records = db.scalars(statement.order_by(DailyReport.report_date.desc())).all()
+    return statement
 
-    mapped_records = []
-    pending_count = 0
-    complete_count = 0
-    for record in records:
-        data = record.extracted_data or {}
-        if not (data.get("template") and data.get("shift_sales_litres")):
-            continue
-        shifts = _shift_entry_status(record.raw_cells)
-        if all(shifts.values()):
-            complete_count += 1
-            mapped_records.append((record, data))
+
+@router.get("/overview")
+def overview(
+    year: int | None = Query(default=None, ge=2000, le=2100),
+    month: int | None = Query(default=None, ge=1, le=12),
+    station: str | None = Query(default=None, min_length=1, max_length=160),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    base = _base_statement(year, month, station)
+    total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
+
+    # Stream only the fields required for the calculations. Loading all ORM
+    # entities (especially both JSON columns) at once exceeded Render Free's
+    # 512 MiB memory limit on the production dataset.
+    stream_query = (
+        select(
+            DailyReport.station_name,
+            DailyReport.raw_cells,
+            DailyReport.extracted_data,
+        )
+        .join(SourceWorkbook, DailyReport.source_workbook_id == SourceWorkbook.id)
+        .where(DailyReport.id.in_(select(DailyReport.id).join(
+            SourceWorkbook, DailyReport.source_workbook_id == SourceWorkbook.id
+        )))
+    )
+    if year is not None:
+        stream_query = stream_query.where(DailyReport.report_date >= date(year, month or 1, 1))
+        if month is not None:
+            end = date(year + (month == 12), 1 if month == 12 else month + 1, 1)
+            stream_query = stream_query.where(DailyReport.report_date < end)
         else:
-            pending_count += 1
+            stream_query = stream_query.where(DailyReport.report_date < date(year + 1, 1, 1))
+    if station:
+        stream_query = stream_query.where(DailyReport.station_name.ilike(station))
 
-    # Completed days with negative fuel volume or revenue are retained as
-    # source records but excluded from financial KPIs until corrected.
-    eligible = []
-    anomaly_count = 0
-    for record, data in mapped_records:
-        shifts = data.get("shift_sales_litres") or {}
-        pms = _number(shifts.get("pms_total"))
-        ago = _number(shifts.get("ago_total"))
+    counts = {"mapped": 0, "complete": 0, "pending": 0, "included": 0, "anomalies": 0}
+    sums = {
+        "revenue_gmd": [0.0, 0], "pms_litres": [0.0, 0], "ago_litres": [0.0, 0],
+        "cash_reconciliation_difference_gmd": [0.0, 0],
+        "pms_stock_difference_litres": [0.0, 0],
+        "ago_stock_difference_litres": [0.0, 0],
+    }
+    station_totals = {}
+
+    result = db.execute(
+        stream_query.execution_options(stream_results=True, yield_per=100)
+    )
+    for station_name, raw_cells, extracted_data in result:
+        data = extracted_data or {}
+        shifts_data = data.get("shift_sales_litres") or {}
+        if not (data.get("template") and shifts_data):
+            continue
+
+        counts["mapped"] += 1
+        if not all(_shift_entry_status(raw_cells).values()):
+            counts["pending"] += 1
+            continue
+
+        counts["complete"] += 1
+        pms = _number(shifts_data.get("pms_total"))
+        ago = _number(shifts_data.get("ago_total"))
         revenue = _number((data.get("sales_revenue") or {}).get("total_gmd"))
         if any(value is not None and value < 0 for value in (pms, ago, revenue)):
-            anomaly_count += 1
+            counts["anomalies"] += 1
             continue
-        eligible.append((record, data))
 
-    def collect(path):
-        values = []
-        for _, data in eligible:
-            value = data
-            for key in path:
-                value = value.get(key) if isinstance(value, dict) else None
-            values.append(_number(value))
-        return values
+        counts["included"] += 1
+        values = {
+            "revenue_gmd": revenue,
+            "pms_litres": pms,
+            "ago_litres": ago,
+            "cash_reconciliation_difference_gmd": (data.get("cash_reconciliation") or {}).get("difference"),
+            "pms_stock_difference_litres": ((data.get("stock_control") or {}).get("pms") or {}).get("difference"),
+            "ago_stock_difference_litres": ((data.get("stock_control") or {}).get("ago") or {}).get("difference"),
+        }
+        for key, value in values.items():
+            number = _number(value)
+            if number is not None:
+                sums[key][0] += number
+                sums[key][1] += 1
 
-    pms_values = collect(("shift_sales_litres", "pms_total"))
-    ago_values = collect(("shift_sales_litres", "ago_total"))
-    revenue_values = collect(("sales_revenue", "total_gmd"))
-    cash_diff_values = collect(("cash_reconciliation", "difference"))
-    pms_stock_values = collect(("stock_control", "pms", "difference"))
-    ago_stock_values = collect(("stock_control", "ago", "difference"))
-
-    station_map = {}
-    for record, data in eligible:
-        name = record.station_name or "Unresolved station"
-        item = station_map.setdefault(name, {"station_name": name, "report_count": 0, "pms_litres": [], "ago_litres": [], "revenue_gmd": []})
+        name = station_name or "Unresolved station"
+        item = station_totals.setdefault(name, {"report_count": 0, "pms": [0.0, 0], "ago": [0.0, 0], "revenue": [0.0, 0]})
         item["report_count"] += 1
-        item["pms_litres"].append(_number((data.get("shift_sales_litres") or {}).get("pms_total")))
-        item["ago_litres"].append(_number((data.get("shift_sales_litres") or {}).get("ago_total")))
-        item["revenue_gmd"].append(_number((data.get("sales_revenue") or {}).get("total_gmd")))
+        for key, value in (("pms", pms), ("ago", ago), ("revenue", revenue)):
+            if value is not None:
+                item[key][0] += value
+                item[key][1] += 1
 
-    stations = []
-    for item in station_map.values():
-        stations.append({
-            "station_name": item["station_name"],
+    stations = [
+        {
+            "station_name": name,
             "report_count": item["report_count"],
-            "pms_litres": _sum_present(item["pms_litres"]),
-            "ago_litres": _sum_present(item["ago_litres"]),
-            "revenue_gmd": _sum_present(item["revenue_gmd"]),
-        })
+            "pms_litres": _nullable(*item["pms"]),
+            "ago_litres": _nullable(*item["ago"]),
+            "revenue_gmd": _nullable(*item["revenue"]),
+        }
+        for name, item in station_totals.items()
+    ]
     stations.sort(key=lambda item: item["revenue_gmd"] or 0, reverse=True)
 
     warning_count = db.query(ImportWarning).join(
         ImportJob, ImportWarning.import_job_id == ImportJob.id
     ).count()
 
+    recent_query = (
+        select(
+            DailyReport.report_date,
+            DailyReport.station_name,
+            DailyReport.worksheet_name,
+            DailyReport.completeness,
+            DailyReport.source_reference,
+            DailyReport.raw_cells,
+            DailyReport.extracted_data,
+        )
+        .join(SourceWorkbook, DailyReport.source_workbook_id == SourceWorkbook.id)
+    )
+    if year is not None:
+        recent_query = recent_query.where(DailyReport.report_date >= date(year, month or 1, 1))
+        if month is not None:
+            end = date(year + (month == 12), 1 if month == 12 else month + 1, 1)
+            recent_query = recent_query.where(DailyReport.report_date < end)
+        else:
+            recent_query = recent_query.where(DailyReport.report_date < date(year + 1, 1, 1))
+    if station:
+        recent_query = recent_query.where(DailyReport.station_name.ilike(station))
+
+    recent_reports = []
+    for report_date, station_name, worksheet_name, completeness, source_reference, raw_cells, extracted_data in db.execute(
+        recent_query.order_by(DailyReport.report_date.desc()).limit(12)
+    ):
+        data = extracted_data or {}
+        mapped = bool(data.get("template") and data.get("shift_sales_litres"))
+        status = "unmapped"
+        if mapped:
+            status = "complete" if all(_shift_entry_status(raw_cells).values()) else "pending"
+        recent_reports.append({
+            "report_date": report_date.isoformat(),
+            "station_name": station_name,
+            "worksheet_name": worksheet_name,
+            "completeness": completeness,
+            "source_reference": source_reference,
+            "mapped": mapped,
+            "report_status": status,
+        })
+
+    complete_count = counts["complete"]
+    pending_count = counts["pending"]
     return {
-        "data_status": "mapped_extraction_available" if mapped_records or pending_count else "no_mapped_extractions",
+        "data_status": "mapped_extraction_available" if counts["mapped"] else "no_mapped_extractions",
         "period": {"year": year, "month": month, "station": station},
         "records": {
-            "total": len(records),
-            "mapped": complete_count + pending_count,
+            "total": total,
+            "mapped": counts["mapped"],
             "complete": complete_count,
             "pending": pending_count,
-            "included_in_kpis": len(eligible),
-            "excluded_anomalies": anomaly_count,
-            "raw_or_unmapped": len(records) - complete_count - pending_count,
+            "included_in_kpis": counts["included"],
+            "excluded_anomalies": counts["anomalies"],
+            "raw_or_unmapped": total - counts["mapped"],
         },
-        "kpis": {
-            "revenue_gmd": _sum_present(revenue_values),
-            "pms_litres": _sum_present(pms_values),
-            "ago_litres": _sum_present(ago_values),
-            "cash_reconciliation_difference_gmd": _sum_present(cash_diff_values),
-            "pms_stock_difference_litres": _sum_present(pms_stock_values),
-            "ago_stock_difference_litres": _sum_present(ago_stock_values),
-        },
+        "kpis": {key: _nullable(*value) for key, value in sums.items()},
         "stations": stations,
         "validation_warning_count": warning_count,
-        "recent_reports": [
-            {
-                "report_date": record.report_date.isoformat(),
-                "station_name": record.station_name,
-                "worksheet_name": record.worksheet_name,
-                "completeness": record.completeness,
-                "source_reference": record.source_reference,
-                "mapped": bool(data.get("template")),
-                "report_status": (
-                    "complete" if all(_shift_entry_status(record.raw_cells).values())
-                    else "pending" if data.get("template") and data.get("shift_sales_litres")
-                    else "unmapped"
-                ),
-            }
-            for record, data in [(record, record.extracted_data or {}) for record in records[:12]]
-        ],
+        "recent_reports": recent_reports,
     }
