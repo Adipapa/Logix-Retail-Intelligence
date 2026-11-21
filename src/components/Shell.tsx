@@ -350,8 +350,8 @@ export function Shell({
                 onClick={() =>
                   onFiltersChange({
                     stationId: 'ALL',
-                    year: '2025',
-                    month: '1',
+                    year: 'ALL',
+                    month: 'ALL',
                     fuelType: 'ALL',
                     shift: 'ALL',
                     status: 'ALL',
