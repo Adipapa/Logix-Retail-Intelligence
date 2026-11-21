@@ -34,6 +34,7 @@ import type {
   SavedReport,
   SyncRun,
   UserProfile,
+  Station,
 } from './types/logix';
 
 const PREVIEW_USER: UserProfile = {
@@ -101,6 +102,22 @@ export default function App() {
     status: 'ALL',
     search: '',
   });
+
+  // The production analytics API is the source of station options while the legacy workspace is not connected.
+  const productionStations = useMemo<Station[]>(() => (liveAnalytics?.stations ?? []).map((station) => ({
+    ownerUid: '',
+    stationId: station.station_name,
+    canonicalName: station.station_name,
+    territory: '',
+    folderPath: '',
+    aliases: [station.station_name],
+    activeStatus: 'active',
+    pumpCount: 0,
+    tankCapacityPms: 0,
+    tankCapacityAgo: 0,
+    createdAt: '',
+    updatedAt: '',
+  })), [liveAnalytics]);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -174,7 +191,7 @@ export default function App() {
     let active = true;
     const stationName = filters.stationId === 'ALL'
       ? undefined
-      : workspace.stations.find((station) => station.stationId === filters.stationId)?.canonicalName;
+      : productionStations.find((station) => station.stationId === filters.stationId)?.canonicalName;
     apiAnalyticsOverview({
       year: filters.year,
       month: filters.month,
@@ -384,7 +401,7 @@ export default function App() {
         onSignOut={handleSignOut}
         filters={filters}
         onFiltersChange={setFilters}
-        stations={workspace.stations}
+        stations={productionStations}
         years={years}
         latestSync={workspace.syncRuns[0]}
         showGlobalFilters={!hideGlobalFilters}
