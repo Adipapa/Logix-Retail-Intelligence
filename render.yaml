@@ -5,7 +5,7 @@ services:
     name: logix-retail-api
     runtime: python
     plan: free
-    region: frankfurt
+    region: oregon
     branch: postgres-migration
     rootDir: backend
     buildCommand: pip install -r requirements.txt
@@ -39,10 +39,10 @@ services:
         value: /Logix Retail
 
   - type: web
-    name: logix-retail-frontend
+    name: Logix-Retail-Intelligence
     runtime: static
     branch: postgres-migration
-    buildCommand: npm install && npm run build
+    buildCommand: bun install --frozen-lockfile && bun run build
     staticPublishPath: dist
     autoDeploy: true
     envVars:
