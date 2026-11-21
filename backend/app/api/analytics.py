@@ -265,20 +265,33 @@ def _production_report_row(report_id, report_date, station_name, worksheet_name,
         pms_total = ago_total = total_revenue = None
 
     pump_readings = []
-    for pump in data.get("pump_meters") or []:
-        for shift_name, reading in (pump.get("shifts") or {}).items():
-            reading = reading or {}
-            opening = _number(reading.get("opening"))
-            closing = _number(reading.get("closing"))
-            throughput = _number(reading.get("throughput"))
+    shift_columns = {
+        "Morning": ("D", "E"),
+        "Afternoon": ("F", "G"),
+        "Night": ("H", "I"),
+    }
+    pumps = data.get("pump_meters") or []
+    for index, pump in enumerate(pumps):
+        row_number = index + 5
+        for shift_name, (opening_col, closing_col) in shift_columns.items():
+            opening_cell = (raw_cells or {}).get(f"{opening_col}{row_number}") or {}
+            closing_cell = (raw_cells or {}).get(f"{closing_col}{row_number}") or {}
+            opening = _number(opening_cell.get("value"))
+            closing = _number(closing_cell.get("value"))
+            reading = (pump.get("shifts") or {}).get(shift_name.lower()) or {}
+            opening = opening if opening is not None else _number(reading.get("opening"))
+            closing = closing if closing is not None else _number(reading.get("closing"))
+            if opening is None and closing is None:
+                continue
+            throughput = (closing - opening) if opening is not None and closing is not None else _number(reading.get("throughput"))
             flag = "negative_movement" if throughput is not None and throughput < 0 else (
                 "missing_meter" if opening is None or closing is None else "normal"
             )
             pump_readings.append({
-                "pumpId": str(pump.get("pump_label") or "Unknown pump"),
+                "pumpId": str(pump.get("pump_label") or f"Pump {index + 1}"),
                 "island": str(pump.get("island") or ""),
                 "product": pump.get("product") if pump.get("product") in ("PMS", "AGO") else "PMS",
-                "shift": str(shift_name).title(),
+                "shift": shift_name,
                 "openingMeter": opening,
                 "closingMeter": closing,
                 "throughput": throughput,
