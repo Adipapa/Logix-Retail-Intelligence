@@ -227,3 +227,209 @@ def overview(
         "validation_warning_count": warning_count,
         "recent_reports": recent_reports,
     }
+
+
+def _sum_present(*values):
+    present = [_number(value) for value in values]
+    present = [value for value in present if value is not None]
+    return round(sum(present), 2) if present else None
+
+
+def _canonical_station(name):
+    cleaned = (name or "Unresolved station").strip()
+    return cleaned.title()
+
+
+def _production_report_row(report_id, report_date, station_name, worksheet_name, completeness, source_reference, imported_at, raw_cells, data):
+    data = data or {}
+    shifts = data.get("shift_sales_litres") or {}
+    pms_shifts = shifts.get("pms") or {}
+    ago_shifts = shifts.get("ago") or {}
+    revenue = data.get("sales_revenue") or {}
+    meters = data.get("meter_totals") or {}
+    stock = data.get("stock_control") or {}
+    pms_stock = stock.get("pms") or {}
+    ago_stock = stock.get("ago") or {}
+    cash = data.get("cash_reconciliation") or {}
+    credit = data.get("credit_sales") or {}
+    delivery = data.get("delivery_totals") or {}
+    pms_delivery = delivery.get("pms") or {}
+    ago_delivery = delivery.get("ago") or {}
+    pms_total = _number(shifts.get("pms_total"))
+    ago_total = _number(shifts.get("ago_total"))
+    total_revenue = _number(revenue.get("total_gmd"))
+    anomaly = any(value is not None and value < 0 for value in (pms_total, ago_total, total_revenue))
+    if anomaly:
+        pms_total = ago_total = total_revenue = None
+
+    pump_readings = []
+    for pump in data.get("pump_meters") or []:
+        for shift_name, reading in (pump.get("shifts") or {}).items():
+            reading = reading or {}
+            opening = _number(reading.get("opening"))
+            closing = _number(reading.get("closing"))
+            throughput = _number(reading.get("throughput"))
+            flag = "negative_movement" if throughput is not None and throughput < 0 else (
+                "missing_meter" if opening is None or closing is None else "normal"
+            )
+            pump_readings.append({
+                "pumpId": str(pump.get("pump_label") or "Unknown pump"),
+                "island": str(pump.get("island") or ""),
+                "product": pump.get("product") if pump.get("product") in ("PMS", "AGO") else "PMS",
+                "shift": str(shift_name).title(),
+                "openingMeter": opening,
+                "closingMeter": closing,
+                "throughput": throughput,
+                "flag": flag,
+            })
+
+    deliveries = data.get("deliveries") or []
+    origins = sorted({str(item.get("origin")).strip() for item in deliveries if item.get("origin")})
+    destinations = sorted({str(item.get("destination")).strip() for item in deliveries if item.get("destination")})
+    diversion_descriptions = [
+        f"{item.get('origin') or 'Unknown'} → {item.get('destination') or 'Unknown'}"
+        for item in deliveries if _number(item.get("diversion")) not in (None, 0)
+    ]
+
+    def val(obj, key):
+        return _number((obj or {}).get(key))
+
+    pms_return = val((meters.get("return_to_tank") or {}), "pms")
+    ago_return = val((meters.get("return_to_tank") or {}), "ago")
+    direct = _sum_present(val(pms_delivery, "direct"), val(ago_delivery, "direct"))
+    diverted = _sum_present(val(pms_delivery, "diversion"), val(ago_delivery, "diversion"))
+    shortage = _sum_present(val(pms_delivery, "shortage"), val(ago_delivery, "shortage"))
+    received = _sum_present(val(pms_delivery, "received"), val(ago_delivery, "received"))
+
+    return {
+        "ownerUid": "production",
+        "reportId": str(report_id),
+        "stationId": _canonical_station(station_name),
+        "stationName": _canonical_station(station_name),
+        "territory": "",
+        "workbookId": str(report_id),
+        "workbookPath": source_reference or "",
+        "workbookRevision": "",
+        "worksheetName": worksheet_name,
+        "reportDate": report_date.isoformat(),
+        "year": report_date.year,
+        "month": report_date.month,
+        "weekNumber": report_date.isocalendar().week,
+        "weekday": report_date.strftime("%A"),
+        "completeness": "warning" if completeness == "warning" else "imported",
+        "pmsMorningLitres": val(pms_shifts, "morning"),
+        "pmsAfternoonLitres": val(pms_shifts, "afternoon"),
+        "pmsNightLitres": val(pms_shifts, "night"),
+        "pmsTotalLitres": pms_total,
+        "pmsSalesGmd": None if anomaly else val(revenue, "pms_gmd"),
+        "pmsReturnToTankLitres": pms_return,
+        "pmsCashFuelGmd": None,
+        "agoMorningLitres": val(ago_shifts, "morning"),
+        "agoAfternoonLitres": val(ago_shifts, "afternoon"),
+        "agoNightLitres": val(ago_shifts, "night"),
+        "agoTotalLitres": ago_total,
+        "agoSalesGmd": None if anomaly else val(revenue, "ago_gmd"),
+        "agoReturnToTankLitres": ago_return,
+        "agoCashFuelGmd": None,
+        "totalFuelSalesGmd": total_revenue,
+        "pmsOpeningStock": val(pms_stock, "opening"),
+        "pmsReceipts": val(pms_stock, "receipts"),
+        "pmsTheoreticalStock": val(pms_stock, "theoretical"),
+        "pmsClosingStock": val(pms_stock, "closing"),
+        "pmsStockDiff": val(pms_stock, "difference"),
+        "pmsStockControlRatio": val(pms_stock, "control_ratio"),
+        "agoOpeningStock": val(ago_stock, "opening"),
+        "agoReceipts": val(ago_stock, "receipts"),
+        "agoTheoreticalStock": val(ago_stock, "theoretical"),
+        "agoClosingStock": val(ago_stock, "closing"),
+        "agoStockDiff": val(ago_stock, "difference"),
+        "agoStockControlRatio": val(ago_stock, "control_ratio"),
+        "directDeliveryLitres": direct,
+        "diversionLitres": diverted,
+        "diversionDirection": "; ".join(diversion_descriptions) or None,
+        "shortageLitres": shortage,
+        "receivedLitres": received,
+        "deliveryOrigin": "; ".join(origins) or None,
+        "deliveryDestination": "; ".join(destinations) or None,
+        "creditSalesGmd": val(credit, "amount"),
+        "couponsGmd": val(cash, "coupons"),
+        "qmoneyGmd": val(cash, "qmoney"),
+        "waychitGmd": val(cash, "waychit"),
+        "chequesGmd": val(cash, "cheques"),
+        "cashGmd": val(cash, "cash"),
+        "bankedGmd": val(cash, "banked"),
+        "reconciliationDiffGmd": val(cash, "difference"),
+        "generatorRuntimeHrs": (val(data.get("generator"), "runtime_minutes") / 60) if val(data.get("generator"), "runtime_minutes") is not None else None,
+        "generatorRefuelLitres": None,
+        "cashpowerKwh": val(data.get("cashpower"), "kwh"),
+        "cashpowerPurchaseGmd": val(data.get("cashpower"), "purchase_gmd"),
+        "noteText": str(data.get("notes") or ""),
+        "sourceRowRef": source_reference or "",
+        "pumpReadings": pump_readings,
+        "createdAt": imported_at.isoformat() if imported_at else "",
+        "updatedAt": imported_at.isoformat() if imported_at else "",
+        "productionStatus": "anomaly" if anomaly else "complete",
+    }
+
+
+@router.get("/reports")
+def production_reports(
+    year: int | None = Query(default=None, ge=2000, le=2100),
+    month: int | None = Query(default=None, ge=1, le=12),
+    station: str | None = Query(default=None, min_length=1, max_length=160),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    statement = (
+        select(
+            DailyReport.id,
+            DailyReport.report_date,
+            DailyReport.station_name,
+            DailyReport.worksheet_name,
+            DailyReport.completeness,
+            DailyReport.source_reference,
+            DailyReport.imported_at,
+            DailyReport.raw_cells,
+            DailyReport.extracted_data,
+        )
+        .join(SourceWorkbook, DailyReport.source_workbook_id == SourceWorkbook.id)
+        .order_by(DailyReport.report_date.desc(), DailyReport.id.desc())
+    )
+    if year is not None:
+        statement = statement.where(DailyReport.report_date >= date(year, month or 1, 1))
+        if month is not None:
+            end = date(year + (month == 12), 1 if month == 12 else month + 1, 1)
+            statement = statement.where(DailyReport.report_date < end)
+        else:
+            statement = statement.where(DailyReport.report_date < date(year + 1, 1, 1))
+    if station:
+        statement = statement.where(func.lower(func.trim(DailyReport.station_name)) == station.strip().lower())
+
+    reports = []
+    years = set()
+    stations = {}
+    result = db.execute(statement.execution_options(stream_results=True, yield_per=100))
+    for row in result:
+        (report_id, report_date, station_name, worksheet_name, completeness,
+         source_reference, imported_at, raw_cells, extracted_data) = row
+        data = extracted_data or {}
+        if not (data.get("template") and data.get("shift_sales_litres")):
+            continue
+        if not all(_shift_entry_status(raw_cells).values()):
+            continue
+        report = _production_report_row(
+            report_id, report_date, station_name, worksheet_name, completeness,
+            source_reference, imported_at, raw_cells, data
+        )
+        reports.append(report)
+        years.add(report_date.year)
+        key = (station_name or "Unresolved station").strip().casefold()
+        display = _canonical_station(station_name)
+        if key not in stations:
+            stations[key] = {"stationId": display, "canonicalName": display, "territory": ""}
+    return {
+        "reports": reports,
+        "years": sorted(years),
+        "stations": sorted(stations.values(), key=lambda item: item["canonicalName"].casefold()),
+        "record_count": len(reports),
+    }
