@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ReportDetailDrawer } from './components/ReportDetailDrawer';
+import { LoginView } from './features/LoginView';
 import { Shell } from './components/Shell';
 import { DataSyncMonitorView } from './features/DataSyncMonitorView';
 import { DeliveriesView } from './features/DeliveriesView';
@@ -178,6 +179,7 @@ export default function App() {
         createdAt: new Date().toISOString(),
       });
       setIsAuthenticated(true);
+      setAuthNotice(null);
     } catch (err) {
       setAuthNotice(err instanceof Error ? err.message : 'Sign-in failed.');
       throw err;
@@ -384,12 +386,16 @@ export default function App() {
     }));
   };
 
-  if (!authReady && loadingWorkspace) {
+  if (!authReady) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
         <div className="text-sm text-slate-600">Loading Logix Retail workspace...</div>
       </div>
     );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginView onSignIn={handleSignIn} error={authNotice} />;
   }
 
   const hideGlobalFilters = activeRoute === 'data-monitor';
