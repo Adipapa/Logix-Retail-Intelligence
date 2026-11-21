@@ -178,4 +178,3 @@ def overview(
             for record, data in [(record, record.extracted_data or {}) for record in records[:12]]
         ],
     }
-}
