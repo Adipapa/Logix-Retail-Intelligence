@@ -178,7 +178,7 @@ export interface ImportJob {
   warningsCount: number;
   errorsCount: number;
   errorSummary: string;
-  retryCount: number;
+  retryCount?: number;
   startedAt: string;
   completedAt: string;
 }
