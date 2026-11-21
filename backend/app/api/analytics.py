@@ -492,31 +492,33 @@ def production_monitor(
 
     workbooks = []
     for dropbox_file, source in file_rows:
-        if source is None:
-            continue
         path_parts = [part for part in dropbox_file.path_lower.split("/") if part]
         try:
             root_index = next(i for i, part in enumerate(path_parts) if part.casefold() == "logix retail")
             path_station = path_parts[root_index + 1]
         except (StopIteration, IndexError):
             path_station = "Unresolved station"
-        station_name = station_names.get(source.station_id, _canonical_station(path_station))
+        station_name = station_names.get(source.station_id, _canonical_station(path_station)) if source else _canonical_station(path_station)
+        source_id = source.id if source else None
+        daily_count = workbook_counts.get(source_id, 0) if source_id is not None else 0
+        has_summary = source_id in summary_ids if source_id is not None else False
+        path_year = next((int(part) for part in path_parts if part.isdigit() and len(part) == 4), 0)
         workbooks.append({
             "ownerUid": "production",
-            "workbookId": str(source.id),
+            "workbookId": str(source.id if source else dropbox_file.id),
             "stationId": station_name,
             "stationName": station_name,
-            "year": source.reporting_year or 0,
-            "month": source.reporting_month or 0,
-            "dropboxFileId": source.dropbox_file_id,
-            "path": source.path_lower,
-            "revision": source.revision,
-            "fileName": source.file_name,
+            "year": (source.reporting_year or path_year) if source else path_year,
+            "month": source.reporting_month or 0 if source else 0,
+            "dropboxFileId": dropbox_file.dropbox_id,
+            "path": dropbox_file.path_lower,
+            "revision": dropbox_file.revision,
+            "fileName": source.file_name if source else dropbox_file.name,
             "sizeBytes": dropbox_file.size_bytes,
-            "sheetCount": workbook_counts.get(source.id, 0) + (1 if source.id in summary_ids else 0),
-            "dailySheetsFound": workbook_counts.get(source.id, 0),
-            "hasSummarySheet": source.id in summary_ids,
-            "templateVersion": "Imported extraction" if workbook_counts.get(source.id, 0) else "Unmapped",
+            "sheetCount": daily_count + (1 if has_summary else 0),
+            "dailySheetsFound": daily_count,
+            "hasSummarySheet": has_summary,
+            "templateVersion": "Imported extraction" if daily_count else "Unmapped",
             "calculationVersion": "",
             "status": (
                 "failed" if dropbox_file.import_status == "failed"
@@ -525,7 +527,7 @@ def production_monitor(
                 else "incomplete"
             ),
             "modifiedAt": dropbox_file.modified_at.isoformat() if dropbox_file.modified_at else "",
-            "importedAt": source.imported_at.isoformat() if source.imported_at else "",
+            "importedAt": source.imported_at.isoformat() if source and source.imported_at else "",
         })
 
     job_rows = db.execute(
