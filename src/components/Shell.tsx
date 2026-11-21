@@ -269,7 +269,7 @@ export function Shell({
                 <option value="ALL">All Stations ({stations.length})</option>
                 {stations.map((s) => (
                   <option key={s.stationId} value={s.stationId}>
-                    {s.canonicalName} ({s.territory})
+                    {s.canonicalName}{s.territory ? ` (${s.territory})` : ''}
                   </option>
                 ))}
               </select>
