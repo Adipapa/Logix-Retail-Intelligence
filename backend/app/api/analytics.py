@@ -551,7 +551,6 @@ def production_monitor(
             "warningsCount": job.warnings_count,
             "errorsCount": job.errors_count,
             "errorSummary": job.error_summary or "",
-            "retryCount": 0,
             "startedAt": job.started_at.isoformat() if job.started_at else "",
             "completedAt": job.completed_at.isoformat() if job.completed_at else "",
         })
