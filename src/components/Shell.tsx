@@ -64,6 +64,7 @@ interface ShellProps {
   stations: Station[];
   years: number[];
   latestSync: SyncRun | undefined;
+  latestSyncAt?: string | null;
   showGlobalFilters?: boolean;
   children: React.ReactNode;
 }
@@ -80,6 +81,7 @@ export function Shell({
   stations,
   years,
   latestSync,
+  latestSyncAt,
   showGlobalFilters = true,
   children,
 }: ShellProps) {
@@ -227,7 +229,7 @@ export function Shell({
           <div className="hidden md:flex items-center gap-2 text-xs text-slate-500 whitespace-nowrap">
             <span>Last Dropbox sync:</span>
             <span className="font-mono tabular-nums text-slate-700">
-              {latestSync ? formatDateTime(latestSync.completedAt) : 'Not synced'}
+              {latestSyncAt ? formatDateTime(latestSyncAt) : latestSync ? formatDateTime(latestSync.completedAt) : 'Not synced'}
             </span>
           </div>
 
