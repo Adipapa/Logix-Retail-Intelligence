@@ -17,6 +17,14 @@ interface DataSyncMonitorViewProps {
   importWarnings: ImportWarning[];
   syncRuns: SyncRun[];
   auditLogs: AuditLog[];
+  syncStatus?: {
+    configured: boolean;
+    rootPath: string;
+    lastSyncAt: string | null;
+    lastStatus: string;
+    lastError: string | null;
+    trackedWorkbooks: number;
+  };
   onTriggerManualSync: () => Promise<void>;
   onUploadWorkbook: (file: File) => Promise<void>;
 }
@@ -27,6 +35,7 @@ export function DataSyncMonitorView({
   importWarnings,
   syncRuns,
   auditLogs,
+  syncStatus,
   onTriggerManualSync,
   onUploadWorkbook,
 }: DataSyncMonitorViewProps) {
@@ -75,22 +84,22 @@ export function DataSyncMonitorView({
               <h2 className="text-base font-semibold text-slate-900">
                 Dropbox 15-Minute Synchronisation Engine
               </h2>
-              {latestSync && <StatusLabel status={latestSync.status} />}
+              {syncStatus ? <StatusLabel status={syncStatus.lastStatus === 'completed' ? 'imported' : syncStatus.lastStatus === 'failed' ? 'failed' : 'incomplete'} /> : latestSync && <StatusLabel status={latestSync.status} />}
             </div>
             <p className="mt-1 text-xs text-slate-600">
-              Root path: <span className="font-mono">/Logix Retail / Station / Year / Month / Workbook</span> · Incremental cursor polling every 15 minutes
+              Root path: <span className="font-mono">{syncStatus?.rootPath ?? '/Logix Retail'}</span> · Dropbox inventory and import status from production PostgreSQL
             </p>
             <dl className="mt-4 grid grid-cols-2 gap-3 text-xs border-t border-slate-200 pt-4">
               <div>
                 <dt className="text-slate-500">Latest Sync Completed</dt>
                 <dd className="font-mono tabular-nums text-slate-900 mt-0.5">
-                  {latestSync ? formatDateTime(latestSync.completedAt) : '—'}
+                  {syncStatus?.lastSyncAt ? formatDateTime(syncStatus.lastSyncAt) : latestSync ? formatDateTime(latestSync.completedAt) : '—'}
                 </dd>
               </div>
               <div>
                 <dt className="text-slate-500">Active Dropbox Cursor</dt>
                 <dd className="font-mono text-slate-900 mt-0.5">
-                  {latestSync?.cursorAfter ?? '—'}
+                  {syncStatus ? syncStatus.lastStatus : latestSync?.cursorAfter ?? '—'}
                 </dd>
               </div>
               <div>
@@ -104,6 +113,7 @@ export function DataSyncMonitorView({
                 </dd>
               </div>
             </dl>
+            {syncStatus?.lastError && <p className="mt-3 text-xs text-red-700">Last sync error: {syncStatus.lastError}</p>}
           </div>
           <div className="mt-5 pt-4 border-t border-slate-200 flex items-center justify-between gap-3">
             <span className="text-xs text-slate-500">Source files in Dropbox remain read-only.</span>
