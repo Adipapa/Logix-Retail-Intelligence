@@ -22,7 +22,7 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: https://logix-retail-frontend.onrender.com
+        value: https://logix-retail-intelligence.onrender.com
       - key: BOOTSTRAP_ADMIN_EMAIL
         sync: false
       - key: BOOTSTRAP_ADMIN_PASSWORD
