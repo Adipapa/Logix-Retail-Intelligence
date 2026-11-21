@@ -408,6 +408,12 @@ export default function App() {
           </div>
         )}
 
+        {activeRoute !== 'dashboard' && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900">
+            This section is not yet connected to production PostgreSQL reporting. It is intentionally not populated with demonstration data. The Executive Overview currently displays live database analytics.
+          </div>
+        )}
+
         {activeRoute === 'dashboard' && (
           <ExecutiveOverview
             reports={filteredReports}
