@@ -431,8 +431,8 @@ def production_reports(
             stations[key] = {"stationId": display, "canonicalName": display, "territory": ""}
     available_years = [
         int(value) for value in db.scalars(
-            select(func.distinct(func.extract("year", DailyReport.report_date))).order_by(
-                func.distinct(func.extract("year", DailyReport.report_date))
+            select(func.extract("year", DailyReport.report_date)).distinct().order_by(
+                func.extract("year", DailyReport.report_date)
             )
         ).all() if value is not None
     ]
@@ -481,9 +481,13 @@ def production_monitor(
     for dropbox_file, source in file_rows:
         if source is None:
             continue
-        station_name = station_names.get(source.station_id, _canonical_station(
-            (dropbox_file.path_lower.split("/")[-3] if len(dropbox_file.path_lower.split("/")) >= 3 else "Unresolved station")
-        ))
+        path_parts = [part for part in dropbox_file.path_lower.split("/") if part]
+        try:
+            root_index = next(i for i, part in enumerate(path_parts) if part.casefold() == "logix retail")
+            path_station = path_parts[root_index + 1]
+        except (StopIteration, IndexError):
+            path_station = "Unresolved station"
+        station_name = station_names.get(source.station_id, _canonical_station(path_station))
         workbooks.append({
             "ownerUid": "production",
             "workbookId": str(source.id),
