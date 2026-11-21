@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
+import heroImage from '../assets/images/logix_station_hero_1795006666528.jpg';
 import { BarChart3, Lock, ShieldCheck } from 'lucide-react';
 
 interface LoginViewProps {
@@ -12,7 +13,7 @@ export function LoginView({ onSignIn, error }: LoginViewProps) {
   const [signingIn, setSigningIn] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
 
-  const handleSignIn = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSigningIn(true);
     try {
@@ -85,7 +86,7 @@ export function LoginView({ onSignIn, error }: LoginViewProps) {
         </div>
         <div className="lg:col-span-6 relative min-h-[260px] lg:min-h-[600px] bg-slate-900">
           {!imgFailed ? (
-            <img src="/src/assets/images/logix_station_hero_1795006666528.jpg"
+            <img src={heroImage}
               alt="Logix Retail commercial fuel station forecourt" referrerPolicy="no-referrer"
               onError={() => setImgFailed(true)} className="w-full h-full lg:h-full object-cover" />
           ) : (
