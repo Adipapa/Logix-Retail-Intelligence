@@ -25,7 +25,7 @@ import {
   type WorkspaceData,
 } from './services/workspaceRepository';
 import { buildHistoricalSeedDataset } from './services/seedData';
-import { apiLogin, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionReports, type LiveAnalyticsOverview, type ProductionReportsResponse } from './services/api';
+import { apiLogin, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionReports, apiProductionMonitor, type LiveAnalyticsOverview, type ProductionReportsResponse, type ProductionMonitorResponse } from './services/api';
 import { parseExcelWorkbook } from './services/workbookEngine';
 import type {
   DailyReport,
@@ -86,6 +86,7 @@ export default function App() {
   const [liveAnalyticsError, setLiveAnalyticsError] = useState<string | null>(null);
   const [productionData, setProductionData] = useState<ProductionReportsResponse | null>(null);
   const [productionDataError, setProductionDataError] = useState<string | null>(null);
+  const [productionMonitor, setProductionMonitor] = useState<ProductionMonitorResponse | null>(null);
 
   const [workspace, setWorkspace] = useState<WorkspaceData>(() => emptyWorkspace());
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
@@ -190,26 +191,33 @@ export default function App() {
       setLiveAnalyticsError(null);
       setProductionData(null);
       setProductionDataError(null);
+      setProductionMonitor(null);
       return;
     }
     let active = true;
     const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
-    Promise.all([
-      apiAnalyticsOverview({ year: filters.year, month: filters.month, station: stationName }),
-      apiProductionReports({ year: filters.year, month: filters.month, station: stationName }),
-    ]).then(([analytics, production]) => {
-      if (active) {
-        setLiveAnalytics(analytics);
-        setLiveAnalyticsError(null);
-        setProductionData(production);
-        setProductionDataError(null);
+    (async () => {
+      try {
+        const analytics = await apiAnalyticsOverview({ year: filters.year, month: filters.month, station: stationName });
+        if (active) {
+          setLiveAnalytics(analytics);
+          setLiveAnalyticsError(null);
+        }
+        const production = await apiProductionReports({ year: filters.year, month: filters.month, station: stationName });
+        if (active) {
+          setProductionData(production);
+          setProductionDataError(null);
+        }
+        const monitor = await apiProductionMonitor();
+        if (active) setProductionMonitor(monitor);
+      } catch (err) {
+        if (active) {
+          const message = err instanceof Error ? err.message : 'Unable to load production data.';
+          setLiveAnalyticsError(message);
+          setProductionDataError(message);
+        }
       }
-    }).catch((err) => {
-      if (active) {
-        setLiveAnalyticsError(err instanceof Error ? err.message : 'Live analytics unavailable.');
-        setProductionDataError(err instanceof Error ? err.message : 'Production reports unavailable.');
-      }
-    });
+    })();
     return () => { active = false; };
   }, [isAuthenticated, filters.year, filters.month, filters.stationId]);
 
@@ -521,11 +529,12 @@ export default function App() {
 
         {activeRoute === 'data-monitor' && (
           <DataSyncMonitorView
-            workbooks={workspace.workbooks}
-            importJobs={workspace.importJobs}
-            importWarnings={workspace.importWarnings}
-            syncRuns={workspace.syncRuns}
-            auditLogs={workspace.auditLogs}
+            workbooks={productionMonitor?.workbooks ?? []}
+            importJobs={productionMonitor?.importJobs ?? []}
+            importWarnings={productionMonitor?.importWarnings ?? []}
+            syncRuns={productionMonitor?.syncRuns ?? []}
+            auditLogs={productionMonitor?.auditLogs ?? []}
+            syncStatus={productionMonitor?.syncStatus}
             onTriggerManualSync={handleTriggerManualSync}
             onUploadWorkbook={handleUploadWorkbook}
           />
