@@ -193,9 +193,7 @@ export default function App() {
       return;
     }
     let active = true;
-    const stationName = filters.stationId === 'ALL'
-      ? undefined
-      : productionStations.find((station) => station.stationId === filters.stationId)?.canonicalName;
+    const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
     Promise.all([
       apiAnalyticsOverview({ year: filters.year, month: filters.month, station: stationName }),
       apiProductionReports({ year: filters.year, month: filters.month, station: stationName }),
@@ -213,7 +211,7 @@ export default function App() {
       }
     });
     return () => { active = false; };
-  }, [isAuthenticated, filters.year, filters.month, filters.stationId, productionData?.stations]);
+  }, [isAuthenticated, filters.year, filters.month, filters.stationId]);
 
   const years = productionData?.years ?? [];
 
