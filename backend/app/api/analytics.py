@@ -10,6 +10,17 @@ from app.models.user import User
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
+# Each shift has two fuel-meter columns (PMS and AGO). A value counts as
+# entered only when the source cell contains a numeric value, not a formula
+# result. This preserves the distinction between a real entered zero and a
+# blank cell whose spreadsheet formula happens to calculate to zero.
+SHIFT_INPUT_COLUMNS = {
+    "morning": ("D", "E"),
+    "afternoon": ("F", "G"),
+    "night": ("H", "I"),
+}
+PUMP_ROWS = range(5, 13)
+
 
 def _number(value):
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
@@ -18,6 +29,24 @@ def _number(value):
 def _sum_present(values):
     present = [value for value in values if value is not None]
     return round(sum(present), 2) if present else None
+
+
+def _shift_entry_status(raw_cells):
+    raw_cells = raw_cells or {}
+    status = {}
+    for shift, columns in SHIFT_INPUT_COLUMNS.items():
+        entered = False
+        for column in columns:
+            for row in PUMP_ROWS:
+                cell = raw_cells.get(f"{column}{row}") or {}
+                value = cell.get("value")
+                if "formula" not in cell and _number(value) is not None:
+                    entered = True
+                    break
+            if entered:
+                break
+        status[shift] = entered
+    return status
 
 
 @router.get("/overview")
@@ -42,15 +71,37 @@ def overview(
         statement = statement.where(DailyReport.station_name.ilike(station))
     records = db.scalars(statement.order_by(DailyReport.report_date.desc())).all()
 
-    mapped = []
+    mapped_records = []
+    pending_count = 0
+    complete_count = 0
     for record in records:
         data = record.extracted_data or {}
-        if data.get("template") and data.get("shift_sales_litres"):
-            mapped.append((record, data))
+        if not (data.get("template") and data.get("shift_sales_litres")):
+            continue
+        shifts = _shift_entry_status(record.raw_cells)
+        if all(shifts.values()):
+            complete_count += 1
+            mapped_records.append((record, data))
+        else:
+            pending_count += 1
+
+    # Completed days with negative fuel volume or revenue are retained as
+    # source records but excluded from financial KPIs until corrected.
+    eligible = []
+    anomaly_count = 0
+    for record, data in mapped_records:
+        shifts = data.get("shift_sales_litres") or {}
+        pms = _number(shifts.get("pms_total"))
+        ago = _number(shifts.get("ago_total"))
+        revenue = _number((data.get("sales_revenue") or {}).get("total_gmd"))
+        if any(value is not None and value < 0 for value in (pms, ago, revenue)):
+            anomaly_count += 1
+            continue
+        eligible.append((record, data))
 
     def collect(path):
         values = []
-        for _, data in mapped:
+        for _, data in eligible:
             value = data
             for key in path:
                 value = value.get(key) if isinstance(value, dict) else None
@@ -65,7 +116,7 @@ def overview(
     ago_stock_values = collect(("stock_control", "ago", "difference"))
 
     station_map = {}
-    for record, data in mapped:
+    for record, data in eligible:
         name = record.station_name or "Unresolved station"
         item = station_map.setdefault(name, {"station_name": name, "report_count": 0, "pms_litres": [], "ago_litres": [], "revenue_gmd": []})
         item["report_count"] += 1
@@ -89,9 +140,17 @@ def overview(
     ).count()
 
     return {
-        "data_status": "mapped_extraction_available" if mapped else "no_mapped_extractions",
+        "data_status": "mapped_extraction_available" if mapped_records else "no_mapped_extractions",
         "period": {"year": year, "month": month, "station": station},
-        "records": {"total": len(records), "mapped": len(mapped), "raw_or_unmapped": len(records) - len(mapped)},
+        "records": {
+            "total": len(records),
+            "mapped": len(mapped_records),
+            "complete": complete_count,
+            "pending": pending_count,
+            "included_in_kpis": len(eligible),
+            "excluded_anomalies": anomaly_count,
+            "raw_or_unmapped": len(records) - len(mapped_records),
+        },
         "kpis": {
             "revenue_gmd": _sum_present(revenue_values),
             "pms_litres": _sum_present(pms_values),
@@ -110,7 +169,13 @@ def overview(
                 "completeness": record.completeness,
                 "source_reference": record.source_reference,
                 "mapped": bool(data.get("template")),
+                "report_status": (
+                    "complete" if all(_shift_entry_status(record.raw_cells).values())
+                    else "pending" if data.get("template") and data.get("shift_sales_litres")
+                    else "unmapped"
+                ),
             }
             for record, data in [(record, record.extracted_data or {}) for record in records[:12]]
         ],
     }
+}
