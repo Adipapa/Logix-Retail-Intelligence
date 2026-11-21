@@ -132,3 +132,30 @@ export async function apiProductionReports(filters: {
   if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Unable to load production reports.");
   return response.json();
 }
+
+
+export interface ProductionMonitorResponse {
+  workbooks: import("../types/logix").SourceWorkbook[];
+  importJobs: import("../types/logix").ImportJob[];
+  importWarnings: import("../types/logix").ImportWarning[];
+  syncRuns: import("../types/logix").SyncRun[];
+  auditLogs: import("../types/logix").AuditLog[];
+  syncStatus: {
+    configured: boolean;
+    rootPath: string;
+    lastSyncAt: string | null;
+    lastStatus: string;
+    lastError: string | null;
+    trackedWorkbooks: number;
+  };
+}
+
+export async function apiProductionMonitor(): Promise<ProductionMonitorResponse> {
+  const token = localStorage.getItem("logix_api_token");
+  if (!token) throw new Error("Sign in to load production monitoring data.");
+  const response = await fetch(`${API_BASE}/api/v1/analytics/monitor`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Unable to load production monitoring data.");
+  return response.json();
+}
