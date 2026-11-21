@@ -140,6 +140,11 @@ export function ReconciliationView({
                   </td>
                 </tr>
               ))}
+              {reconciliations.length === 0 && (
+                <tr><td colSpan={8} className="py-6 text-center font-sans text-slate-500">
+                  No extracted SUMMARY reconciliation results are stored in the production database.
+                </td></tr>
+              )}
             </tbody>
           </table>
         </div>
