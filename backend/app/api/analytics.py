@@ -140,16 +140,16 @@ def overview(
     ).count()
 
     return {
-        "data_status": "mapped_extraction_available" if mapped_records else "no_mapped_extractions",
+        "data_status": "mapped_extraction_available" if mapped_records or pending_count else "no_mapped_extractions",
         "period": {"year": year, "month": month, "station": station},
         "records": {
             "total": len(records),
-            "mapped": len(mapped_records),
+            "mapped": complete_count + pending_count,
             "complete": complete_count,
             "pending": pending_count,
             "included_in_kpis": len(eligible),
             "excluded_anomalies": anomaly_count,
-            "raw_or_unmapped": len(records) - len(mapped_records),
+            "raw_or_unmapped": len(records) - complete_count - pending_count,
         },
         "kpis": {
             "revenue_gmd": _sum_present(revenue_values),
