@@ -105,3 +105,30 @@ export async function apiAnalyticsOverview(filters: {
   if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Unable to load live analytics.");
   return response.json();
 }
+
+
+export interface ProductionReportsResponse {
+  reports: import("../types/logix").DailyReport[];
+  years: number[];
+  stations: Array<{ stationId: string; canonicalName: string; territory: string }>;
+  record_count: number;
+}
+
+export async function apiProductionReports(filters: {
+  year?: string;
+  month?: string;
+  station?: string;
+} = {}): Promise<ProductionReportsResponse> {
+  const token = localStorage.getItem("logix_api_token");
+  if (!token) throw new Error("Sign in to load production reports.");
+  const params = new URLSearchParams();
+  if (filters.year && filters.year !== "ALL") params.set("year", filters.year);
+  if (filters.month && filters.month !== "ALL" && filters.year && filters.year !== "ALL") params.set("month", filters.month);
+  if (filters.station && filters.station !== "ALL") params.set("station", filters.station);
+  const query = params.toString();
+  const response = await fetch(`${API_BASE}/api/v1/analytics/reports${query ? `?${query}` : ""}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Unable to load production reports.");
+  return response.json();
+}
