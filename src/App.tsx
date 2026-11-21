@@ -264,7 +264,12 @@ export default function App() {
     }
     try {
       const result = await apiDropboxSync();
-      setAuthNotice(`Dropbox sync completed: ${result.files_seen} files checked; ${result.new_or_changed} new or revised; ${result.tracked_workbooks} tracked. Extraction attempted: ${result.imports_attempted ?? 0}; succeeded: ${result.imports_succeeded ?? 0}; failed: ${result.imports_failed ?? 0}. Review the Data Monitor for file-level results.`);
+      setAuthNotice(`Dropbox sync completed: ${result.files_seen} files checked; ${result.new_or_changed} new or revised; ${result.tracked_workbooks} tracked. Extraction attempted: ${result.imports_attempted ?? 0}; succeeded: ${result.imports_succeeded ?? 0}; failed: ${result.imports_failed ?? 0}.`);
+      const analytics = await apiAnalyticsOverview({ year: filters.year, month: filters.month, station: filters.stationId === 'ALL' ? undefined : filters.stationId });
+      setLiveAnalytics(analytics);
+      const production = await apiProductionReports({ year: filters.year, month: filters.month, station: filters.stationId === 'ALL' ? undefined : filters.stationId });
+      setProductionData(production);
+      setProductionMonitor(await apiProductionMonitor());
     } catch (err) {
       setAuthNotice(err instanceof Error ? err.message : 'Dropbox sync failed.');
     }
