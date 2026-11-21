@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.database.session import get_db
-from app.models.operations import DailyReport, ImportJob, ImportWarning, SourceWorkbook
+from app.models.operations import DailyReport, ImportJob, ImportWarning, SourceWorkbook, Station as StationModel
 from app.models.user import User
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -143,8 +143,9 @@ def overview(
                 sums[key][0] += number
                 sums[key][1] += 1
 
-        name = station_name or "Unresolved station"
-        item = station_totals.setdefault(name, {"report_count": 0, "pms": [0.0, 0], "ago": [0.0, 0], "revenue": [0.0, 0]})
+        name = _canonical_station(station_name)
+        key = name.casefold()
+        item = station_totals.setdefault(key, {"station_name": name, "report_count": 0, "pms": [0.0, 0], "ago": [0.0, 0], "revenue": [0.0, 0]})
         item["report_count"] += 1
         for key, value in (("pms", pms), ("ago", ago), ("revenue", revenue)):
             if value is not None:
@@ -153,7 +154,7 @@ def overview(
 
     stations = [
         {
-            "station_name": name,
+            "station_name": item["station_name"],
             "report_count": item["report_count"],
             "pms_litres": _nullable(*item["pms"]),
             "ago_litres": _nullable(*item["ago"]),
@@ -427,9 +428,26 @@ def production_reports(
         display = _canonical_station(station_name)
         if key not in stations:
             stations[key] = {"stationId": display, "canonicalName": display, "territory": ""}
+    available_years = [
+        int(value) for value in db.scalars(
+            select(func.distinct(func.extract("year", DailyReport.report_date))).order_by(
+                func.distinct(func.extract("year", DailyReport.report_date))
+            )
+        ).all() if value is not None
+    ]
+    station_rows = db.scalars(select(StationModel.name).where(StationModel.active.is_(True))).all()
+    station_options = {}
+    for value in station_rows:
+        display = _canonical_station(value)
+        station_options.setdefault(display.casefold(), {
+            "stationId": display, "canonicalName": display, "territory": ""
+        })
+    for item in stations.values():
+        station_options.setdefault(item["canonicalName"].casefold(), item)
+
     return {
         "reports": reports,
-        "years": sorted(years),
-        "stations": sorted(stations.values(), key=lambda item: item["canonicalName"].casefold()),
+        "years": available_years,
+        "stations": sorted(station_options.values(), key=lambda item: item["canonicalName"].casefold()),
         "record_count": len(reports),
     }
