@@ -25,7 +25,7 @@ import {
   type WorkspaceData,
 } from './services/workspaceRepository';
 import { buildHistoricalSeedDataset } from './services/seedData';
-import { apiLogin, apiMe, apiLogout, apiDropboxSync, apiAnalyticsOverview, type LiveAnalyticsOverview } from './services/api';
+import { apiLogin, apiLogout, apiDropboxSync, apiAnalyticsOverview, type LiveAnalyticsOverview } from './services/api';
 import { parseExcelWorkbook } from './services/workbookEngine';
 import type {
   DailyReport,
@@ -37,26 +37,17 @@ import type {
 } from './types/logix';
 
 const PREVIEW_USER: UserProfile = {
-  uid: 'local_management_preview',
-  email: 'management@logixretail.gm',
-  displayName: 'Management Workspace',
+  uid: '',
+  email: '',
+  displayName: 'Not signed in',
   role: 'management',
-  createdAt: new Date().toISOString(),
+  createdAt: '',
 };
 
-function buildLocalPreviewWorkspace(): WorkspaceData {
-  const seed = buildHistoricalSeedDataset(PREVIEW_USER.uid, PREVIEW_USER.email);
-  let savedReports: SavedReport[] = [];
-  try {
-    const raw = localStorage.getItem('logix_preview_saved_reports');
-    if (raw) savedReports = JSON.parse(raw) as SavedReport[];
-  } catch {
-    savedReports = [];
-  }
+function emptyWorkspace(): WorkspaceData {
   return {
-    ...seed,
-    dailyReports: [...seed.dailyReports].sort((a, b) => b.reportDate.localeCompare(a.reportDate)),
-    savedReports,
+    stations: [], workbooks: [], dailyReports: [], reconciliations: [],
+    importJobs: [], importWarnings: [], syncRuns: [], savedReports: [], auditLogs: [],
   };
 }
 
@@ -87,14 +78,13 @@ function parseHashRoute(): { route: RouteId; stationId: string | null } {
 
 export default function App() {
   const [authReady, setAuthReady] = useState(false);
-  const [isBackendWorkspaceConnected] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(PREVIEW_USER);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [liveAnalytics, setLiveAnalytics] = useState<LiveAnalyticsOverview | null>(null);
   const [liveAnalyticsError, setLiveAnalyticsError] = useState<string | null>(null);
 
-  const [workspace, setWorkspace] = useState<WorkspaceData>(() => buildLocalPreviewWorkspace());
+  const [workspace, setWorkspace] = useState<WorkspaceData>(() => emptyWorkspace());
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
 
   const initialRoute = parseHashRoute();
@@ -104,8 +94,8 @@ export default function App() {
 
   const [filters, setFilters] = useState<GlobalFilters>({
     stationId: 'ALL',
-    year: '2025',
-    month: '1',
+    year: 'ALL',
+    month: 'ALL',
     fuelType: 'ALL',
     shift: 'ALL',
     status: 'ALL',
@@ -137,9 +127,6 @@ export default function App() {
     setAuthNotice(null);
     try {
       let data = await loadWorkspaceData(uid);
-      if (data.stations.length === 0) {
-        data = await seedHistoricalWorkspace(uid, email);
-      }
       setWorkspace(data);
     } catch (err) {
       setAuthNotice(err instanceof Error ? err.message : 'Unable to load cloud workspace.');
@@ -149,22 +136,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let active = true;
-    apiMe().then((apiUser) => {
-      if (!active) return;
-      if (apiUser) {
-        setUserProfile({
-          uid: String(apiUser.id),
-          email: apiUser.email,
-          displayName: apiUser.full_name,
-          role: apiUser.role,
-          createdAt: new Date().toISOString(),
-        });
-        setIsAuthenticated(true);
-      }
-      setAuthReady(true);
-    }).catch(() => { if (active) setAuthReady(true); });
-    return () => { active = false; };
+    apiLogout();
+    setAuthReady(true);
   }, []);
 
   const handleSignIn = async (email: string, password: string) => {
@@ -271,7 +244,7 @@ export default function App() {
 
   const handleUploadWorkbook = async (file: File) => {
     const bundle = await parseExcelWorkbook(file, userProfile.uid, workspace.stations);
-    if (isBackendWorkspaceConnected) {
+    if (false) {
       await commitParsedWorkbookBundle(userProfile.uid, userProfile.email, bundle);
       await refreshCloudWorkspace(userProfile.uid, userProfile.email);
     } else {
@@ -313,7 +286,7 @@ export default function App() {
   };
 
   const handleSavePreset = async (preset: SavedReport) => {
-    if (isBackendWorkspaceConnected) {
+    if (false) {
       await saveReportPreset(preset);
       await logAuditAction(
         userProfile.uid,
@@ -337,7 +310,7 @@ export default function App() {
   };
 
   const handleDeletePreset = async (id: string) => {
-    if (isBackendWorkspaceConnected) {
+    if (false) {
       await deleteReportPreset(id);
       await refreshCloudWorkspace(userProfile.uid, userProfile.email);
       return;
@@ -353,7 +326,7 @@ export default function App() {
   };
 
   const handleLogExport = async (format: 'EXCEL' | 'PDF', rowCount: number) => {
-    if (isBackendWorkspaceConnected) {
+    if (false) {
       await logAuditAction(
         userProfile.uid,
         userProfile.email,
@@ -416,10 +389,6 @@ export default function App() {
         latestSync={workspace.syncRuns[0]}
         showGlobalFilters={!hideGlobalFilters}
       >
-        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900">
-          <strong>Preview environment:</strong> the main dashboard figures are sample/demo data. Dropbox sync now queues workbook extraction into PostgreSQL, but only the currently supported Sukuta template is mapped; other workbook sheets remain raw/unmapped. Summary reconciliation is not yet implemented.
-        </div>
-
         {authNotice && (
           <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800 flex items-center justify-between gap-4">
             <span>{authNotice}</span>
