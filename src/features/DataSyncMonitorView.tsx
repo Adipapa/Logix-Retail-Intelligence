@@ -332,6 +332,7 @@ export function DataSyncMonitorView({
                     </td>
                   </tr>
                 ))}
+                {syncRuns.length === 0 && <tr><td colSpan={8} className="py-6 text-center font-sans text-slate-500">Historical sync-run records are not stored in production. The latest sync status is shown above.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -359,6 +360,7 @@ export function DataSyncMonitorView({
                     <td className="py-2 pl-3 text-slate-600">{al.details}</td>
                   </tr>
                 ))}
+                {auditLogs.length === 0 && <tr><td colSpan={4} className="py-6 text-center font-sans text-slate-500">No audit-log records are stored in production PostgreSQL.</td></tr>}
               </tbody>
             </table>
           </div>
