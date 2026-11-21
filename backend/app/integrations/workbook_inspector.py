@@ -101,8 +101,10 @@ def inspect_workbook(content: bytes, source_path: str):
     daily,warnings,summaries=[],[],[]
     summary_cells={}
     station_from_sheet=None
-    for name in wb.sheetnames:
-        ws,wsv=wb[name],wb_values[name]
+    # Iterate worksheets only; chartsheets do not support iter_rows().
+    for ws in wb.worksheets:
+        name=ws.title
+        wsv=wb_values[name]
         cells,no_cache={},[]
         for row in ws.iter_rows():
             for cell in row:
