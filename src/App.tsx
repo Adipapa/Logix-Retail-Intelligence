@@ -415,6 +415,7 @@ export default function App() {
         stations={productionStations}
         years={years}
         latestSync={workspace.syncRuns[0]}
+        latestSyncAt={productionMonitor?.syncStatus.lastSyncAt}
         showGlobalFilters={!hideGlobalFilters}
       >
         {authNotice && (
@@ -446,7 +447,7 @@ export default function App() {
           <ExecutiveOverview
             reports={filteredReports}
             stations={productionStations}
-            workbooks={workspace.workbooks}
+            workbooks={productionMonitor?.workbooks ?? []}
             warnings={filteredWarnings}
             reconciliations={filteredReconciliations}
             onInspectReport={setInspectedReport}
@@ -461,7 +462,7 @@ export default function App() {
           <StationsView
             stations={productionStations}
             reports={filteredReports}
-            workbooks={workspace.workbooks}
+            workbooks={productionMonitor?.workbooks ?? []}
             selectedStationId={selectedStationId}
             onSelectStation={(id) =>
               id ? navigate('station-detail', id) : navigate('stations', null)
