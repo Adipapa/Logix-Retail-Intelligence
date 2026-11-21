@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.database.session import get_db
-from app.models.operations import DailyReport, ImportJob, ImportWarning, SourceWorkbook, Station as StationModel
+from app.models.operations import DailyReport, ImportJob, ImportWarning, SourceWorkbook, Station as StationModel, SummarySnapshot
+from app.models.integration import DropboxFile, DropboxSyncState
 from app.models.user import User
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -450,4 +451,130 @@ def production_reports(
         "years": available_years,
         "stations": sorted(station_options.values(), key=lambda item: item["canonicalName"].casefold()),
         "record_count": len(reports),
+    }
+
+
+@router.get("/monitor")
+def production_monitor(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    station_names = {
+        row.id: _canonical_station(row.name)
+        for row in db.scalars(select(StationModel)).all()
+    }
+    file_rows = db.execute(
+        select(DropboxFile, SourceWorkbook)
+        .outerjoin(SourceWorkbook, SourceWorkbook.dropbox_file_id == DropboxFile.dropbox_id)
+        .order_by(DropboxFile.modified_at.desc())
+    ).all()
+    workbook_counts = {}
+    summary_ids = set(db.scalars(select(SummarySnapshot.source_workbook_id).distinct()).all())
+    for source in db.scalars(select(SourceWorkbook)).all():
+        workbook_counts[source.id] = 0
+    for source_id, count in db.execute(
+        select(DailyReport.source_workbook_id, func.count(DailyReport.id)).group_by(DailyReport.source_workbook_id)
+    ).all():
+        workbook_counts[source_id] = count
+
+    workbooks = []
+    for dropbox_file, source in file_rows:
+        if source is None:
+            continue
+        station_name = station_names.get(source.station_id, _canonical_station(
+            (dropbox_file.path_lower.split("/")[-3] if len(dropbox_file.path_lower.split("/")) >= 3 else "Unresolved station")
+        ))
+        workbooks.append({
+            "ownerUid": "production",
+            "workbookId": str(source.id),
+            "stationId": station_name,
+            "stationName": station_name,
+            "year": source.reporting_year or 0,
+            "month": source.reporting_month or 0,
+            "dropboxFileId": source.dropbox_file_id,
+            "path": source.path_lower,
+            "revision": source.revision,
+            "fileName": source.file_name,
+            "sizeBytes": dropbox_file.size_bytes,
+            "sheetCount": workbook_counts.get(source.id, 0) + (1 if source.id in summary_ids else 0),
+            "dailySheetsFound": workbook_counts.get(source.id, 0),
+            "hasSummarySheet": source.id in summary_ids,
+            "templateVersion": "Imported extraction" if workbook_counts.get(source.id, 0) else "Unmapped",
+            "calculationVersion": "",
+            "status": (
+                "failed" if dropbox_file.import_status == "failed"
+                else "warning" if dropbox_file.import_status == "needs_review"
+                else "imported" if dropbox_file.import_status == "imported"
+                else "incomplete"
+            ),
+            "modifiedAt": dropbox_file.modified_at.isoformat() if dropbox_file.modified_at else "",
+            "importedAt": source.imported_at.isoformat() if source.imported_at else "",
+        })
+
+    job_rows = db.execute(
+        select(ImportJob, SourceWorkbook)
+        .join(SourceWorkbook, ImportJob.source_workbook_id == SourceWorkbook.id)
+        .order_by(ImportJob.started_at.desc())
+        .limit(500)
+    ).all()
+    import_jobs = []
+    for job, source in job_rows:
+        import_jobs.append({
+            "ownerUid": "production",
+            "jobId": str(job.id),
+            "workbookId": str(source.id),
+            "fileName": source.file_name,
+            "stationName": station_names.get(source.station_id, "Unresolved station"),
+            "year": source.reporting_year or 0,
+            "month": source.reporting_month or 0,
+            "status": job.status,
+            "recordsExtracted": job.records_extracted,
+            "warningsCount": job.warnings_count,
+            "errorsCount": job.errors_count,
+            "errorSummary": job.error_summary or "",
+            "retryCount": 0,
+            "startedAt": job.started_at.isoformat() if job.started_at else "",
+            "completedAt": job.completed_at.isoformat() if job.completed_at else "",
+        })
+
+    warning_rows = db.execute(
+        select(ImportWarning, ImportJob, SourceWorkbook)
+        .join(ImportJob, ImportWarning.import_job_id == ImportJob.id)
+        .join(SourceWorkbook, ImportJob.source_workbook_id == SourceWorkbook.id)
+        .order_by(ImportJob.started_at.desc())
+        .limit(1000)
+    ).all()
+    warnings = []
+    for warning, job, source in warning_rows:
+        warnings.append({
+            "ownerUid": "production",
+            "warningId": str(warning.id),
+            "jobId": str(job.id),
+            "workbookId": str(source.id),
+            "stationId": station_names.get(source.station_id, ""),
+            "stationName": station_names.get(source.station_id, "Unresolved station"),
+            "reportDate": "",
+            "worksheet": warning.worksheet_name,
+            "field": warning.cell_reference or "",
+            "severity": warning.severity,
+            "message": warning.message,
+            "sourceReference": source.path_lower,
+            "createdAt": job.started_at.isoformat() if job.started_at else "",
+        })
+
+    state = db.scalar(select(DropboxSyncState).where(DropboxSyncState.state_key == "primary"))
+    return {
+        "workbooks": workbooks,
+        "importJobs": import_jobs,
+        "importWarnings": warnings,
+        "syncStatus": {
+            "configured": bool(state),
+            "rootPath": "/Logix Retail",
+            "lastSyncAt": state.last_sync_at.isoformat() if state and state.last_sync_at else None,
+            "lastStatus": state.last_status if state else "never",
+            "lastError": state.last_error if state else None,
+            "trackedWorkbooks": db.query(DropboxFile).count(),
+        },
+        "syncRuns": [],
+        "auditLogs": [],
     }
