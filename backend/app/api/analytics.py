@@ -86,9 +86,6 @@ def overview(
             DailyReport.extracted_data,
         )
         .join(SourceWorkbook, DailyReport.source_workbook_id == SourceWorkbook.id)
-        .where(DailyReport.id.in_(select(DailyReport.id).join(
-            SourceWorkbook, DailyReport.source_workbook_id == SourceWorkbook.id
-        )))
     )
     if year is not None:
         stream_query = stream_query.where(DailyReport.report_date >= date(year, month or 1, 1))
