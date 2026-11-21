@@ -57,12 +57,12 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
             </p>
           </div>
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-700">
-            {formatNumber(liveAnalytics.records.mapped)} mapped / {formatNumber(liveAnalytics.records.total)} total
+            {formatNumber(liveAnalytics.records.included_in_kpis)} complete days included / {formatNumber(liveAnalytics.records.total)} records
           </span>
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="Mapped fuel revenue" value={formatGmd(liveAnalytics.kpis.revenue_gmd)} detail="GMD · supported mapped records" />
-          <Metric label="PMS volume" value={formatLitres(liveAnalytics.kpis.pms_litres)} detail="Litres · mapped records" />
+          <Metric label="Mapped fuel revenue" value={formatGmd(liveAnalytics.kpis.revenue_gmd)} detail="GMD · completed days only" />
+          <Metric label="PMS volume" value={formatLitres(liveAnalytics.kpis.pms_litres)} detail="Litres · completed days only" />
           <Metric label="AGO volume" value={formatLitres(liveAnalytics.kpis.ago_litres)} detail="Litres · mapped records" />
           <Metric label="Validation warnings" value={formatNumber(liveAnalytics.validation_warning_count)} detail="Warnings recorded in PostgreSQL" />
         </div>
@@ -90,7 +90,7 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
             {liveAnalytics.recent_reports.map((report, index) => <div key={report.source_reference + report.report_date + index} className="flex items-start justify-between gap-3 py-2.5 text-xs">
               <div className="min-w-0"><div className="font-semibold text-slate-800">{report.station_name || 'Unresolved station'} · {report.report_date}</div>
                 <div className="mt-1 truncate text-slate-500">{report.worksheet_name || report.source_reference}</div></div>
-              <span className={report.mapped ? 'text-teal-700' : 'text-amber-700'}>{report.mapped ? 'Mapped' : 'Unmapped'}</span>
+              <span className={report.mapped ? 'text-teal-700' : 'text-amber-700'}>{report.report_status === 'complete' ? 'Complete' : report.report_status === 'pending' ? 'Pending shifts' : 'Unmapped'}</span>
             </div>)}
           </div> : <p className="py-6 text-xs text-slate-500">No report records returned.</p>}
         </div>
@@ -98,7 +98,7 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
 
       <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
         <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <div><strong>Data coverage limitation.</strong> {formatNumber(liveAnalytics.records.raw_or_unmapped)} records are not included in mapped sales totals. Do not interpret missing mapped totals as zero sales. The workbook mapping and remaining reporting modules still require validation before financial sign-off.</div>
+          <div><strong>Reporting completeness.</strong> {formatNumber(liveAnalytics.records.pending)} mapped day sheets are excluded because at least one of the morning, afternoon or night fuel-entry shifts is missing. A numeric zero entered in the source sheet counts as an entry; blank cells and formula-only results do not. {formatNumber(liveAnalytics.records.excluded_anomalies)} completed days with negative fuel or revenue values are also excluded pending source correction. {formatNumber(liveAnalytics.records.raw_or_unmapped)} records remain unmapped. Original records are preserved; excluded figures are not treated as zero. Validate source data before financial sign-off.</div>
         </div>
       </section>
     </>}
