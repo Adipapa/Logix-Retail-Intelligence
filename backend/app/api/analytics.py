@@ -27,10 +27,20 @@ def _number(value):
 def _shift_entry_status(raw_cells):
     raw_cells = raw_cells or {}
     status = {}
-    for shift, columns in SHIFT_INPUT_COLUMNS.items():
+    legacy_kotu = (
+        str((raw_cells.get("C3") or {}).get("value") or "").strip().upper() == "MORNING"
+        and str((raw_cells.get("E3") or {}).get("value") or "").strip().upper() == "AFTERNOON"
+        and str((raw_cells.get("G3") or {}).get("value") or "").strip().upper() == "NIGHT"
+    )
+    shift_columns = (
+        {"morning": ("C", "D"), "afternoon": ("E", "F"), "night": ("G", "H")}
+        if legacy_kotu else SHIFT_INPUT_COLUMNS
+    )
+    rows = range(5, 17) if legacy_kotu else PUMP_ROWS
+    for shift, columns in shift_columns.items():
         entered = False
         for column in columns:
-            for row in PUMP_ROWS:
+            for row in rows:
                 cell = raw_cells.get(f"{column}{row}") or {}
                 if "formula" not in cell and _number(cell.get("value")) is not None:
                     entered = True
@@ -265,38 +275,61 @@ def _production_report_row(report_id, report_date, station_name, worksheet_name,
         pms_total = ago_total = total_revenue = None
 
     pump_readings = []
-    shift_columns = {
-        "Morning": ("D", "E"),
-        "Afternoon": ("F", "G"),
-        "Night": ("H", "I"),
-    }
     pumps = data.get("pump_meters") or []
-    for index, pump in enumerate(pumps):
-        row_number = index + 5
-        for shift_name, (opening_col, closing_col) in shift_columns.items():
-            opening_cell = (raw_cells or {}).get(f"{opening_col}{row_number}") or {}
-            closing_cell = (raw_cells or {}).get(f"{closing_col}{row_number}") or {}
-            opening = _number(opening_cell.get("value"))
-            closing = _number(closing_cell.get("value"))
-            reading = (pump.get("shifts") or {}).get(shift_name.lower()) or {}
-            opening = opening if opening is not None else _number(reading.get("opening"))
-            closing = closing if closing is not None else _number(reading.get("closing"))
-            if opening is None and closing is None:
-                continue
-            throughput = (closing - opening) if opening is not None and closing is not None else _number(reading.get("throughput"))
-            flag = "negative_movement" if throughput is not None and throughput < 0 else (
-                "missing_meter" if opening is None or closing is None else "normal"
-            )
-            pump_readings.append({
-                "pumpId": str(pump.get("pump_label") or f"Pump {index + 1}"),
-                "island": str(pump.get("island") or ""),
-                "product": pump.get("product") if pump.get("product") in ("PMS", "AGO") else "PMS",
-                "shift": shift_name,
-                "openingMeter": opening,
-                "closingMeter": closing,
-                "throughput": throughput,
-                "flag": flag,
-            })
+    if data.get("template") == "kotu_legacy_v1":
+        for pump in pumps:
+            for shift_name in ("Morning", "Afternoon", "Night"):
+                reading = (pump.get("shifts") or {}).get(shift_name.lower()) or {}
+                opening = _number(reading.get("opening"))
+                closing = _number(reading.get("closing"))
+                throughput = _number(reading.get("throughput"))
+                if opening is None and closing is None:
+                    continue
+                flag = "negative_movement" if throughput is not None and throughput < 0 else (
+                    "missing_meter" if opening is None or closing is None else "normal"
+                )
+                pump_readings.append({
+                    "pumpId": str(pump.get("pump_label") or "Unknown pump"),
+                    "island": str(pump.get("island") or ""),
+                    "product": pump.get("product") if pump.get("product") in ("PMS", "AGO") else "PMS",
+                    "shift": shift_name,
+                    "openingMeter": opening,
+                    "closingMeter": closing,
+                    "throughput": throughput,
+                    "flag": flag,
+                })
+    else:
+        shift_columns = {
+            "Morning": ("D", "E"),
+            "Afternoon": ("F", "G"),
+            "Night": ("H", "I"),
+        }
+        for index, pump in enumerate(pumps):
+            row_number = index + 5
+            for shift_name, (opening_col, closing_col) in shift_columns.items():
+                opening_cell = (raw_cells or {}).get(f"{opening_col}{row_number}") or {}
+                closing_cell = (raw_cells or {}).get(f"{closing_col}{row_number}") or {}
+                opening = _number(opening_cell.get("value"))
+                closing = _number(closing_cell.get("value"))
+                reading = (pump.get("shifts") or {}).get(shift_name.lower()) or {}
+                opening = opening if opening is not None else _number(reading.get("opening"))
+                closing = closing if closing is not None else _number(reading.get("closing"))
+                if opening is None and closing is None:
+                    continue
+                throughput = (closing - opening) if opening is not None and closing is not None else _number(reading.get("throughput"))
+                flag = "negative_movement" if throughput is not None and throughput < 0 else (
+                    "missing_meter" if opening is None or closing is None else "normal"
+                )
+                pump_readings.append({
+                    "pumpId": str(pump.get("pump_label") or f"Pump {index + 1}"),
+                    "island": str(pump.get("island") or ""),
+                    "product": pump.get("product") if pump.get("product") in ("PMS", "AGO") else "PMS",
+                    "shift": shift_name,
+                    "openingMeter": opening,
+                    "closingMeter": closing,
+                    "throughput": throughput,
+                    "flag": flag,
+                })
 
     deliveries = data.get("deliveries") or []
     origins = sorted({str(item.get("origin")).strip() for item in deliveries if item.get("origin")})
