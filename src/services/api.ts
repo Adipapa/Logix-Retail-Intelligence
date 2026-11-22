@@ -159,3 +159,21 @@ export async function apiProductionMonitor(): Promise<ProductionMonitorResponse>
   if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Unable to load production monitoring data.");
   return response.json();
 }
+
+
+export async function apiReprocessLegacy2022(): Promise<{
+  status: string;
+  workbooks_attempted: number;
+  workbooks_succeeded: number;
+  workbooks_failed: number;
+  results: Array<{ file?: string; status: string; error?: string; records_extracted?: number }>;
+}> {
+  const token = localStorage.getItem("logix_api_token");
+  if (!token) throw new Error("Sign in to reprocess the legacy 2022 workbooks.");
+  const response = await fetch(`${API_BASE}/api/v1/integrations/dropbox/reprocess-legacy-2022`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Legacy workbook reprocessing failed.");
+  return response.json();
+}
