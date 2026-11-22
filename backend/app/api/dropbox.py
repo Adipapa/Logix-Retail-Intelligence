@@ -78,7 +78,15 @@ def sync_now(_: User = Depends(require_admin), db: Session = Depends(get_db)):
         except ApiError as exc:
             # A stale cursor must trigger a full inventory, not be silently advanced.
             is_reset = getattr(exc.error, "is_reset", lambda: False)()
-            if state.cursor and is_reset:
+            error_text = str(exc).casefold()
+            cursor_belongs_to_another_app = (
+                "cursor is for a different app" in error_text
+                or ('invalid "cursor" parameter' in error_text and "different app" in error_text)
+            )
+            if state.cursor and (is_reset or cursor_belongs_to_another_app):
+                # Dropbox cursors are app-specific. When OAuth credentials change
+                # to a different Dropbox app, rebuild the inventory from the root.
+                # Existing DropboxFile rows are retained and reconciled by Dropbox ID.
                 records, next_cursor = reset_cursor()
             else:
                 raise
