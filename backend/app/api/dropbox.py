@@ -75,18 +75,25 @@ def sync_now(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     try:
         try:
             records, next_cursor = scan_folder(state.cursor)
-        except ApiError as exc:
-            # A stale cursor must trigger a full inventory, not be silently advanced.
-            is_reset = getattr(exc.error, "is_reset", lambda: False)()
-            error_text = str(exc).casefold()
+        except Exception as exc:
+            # Dropbox SDK versions may surface a cross-app cursor as BadInputError
+            # rather than ApiError. Inspect the complete exception representation
+            # and recover only for this specific cursor mismatch (or Dropbox reset).
+            error_text = f"{type(exc).__name__}: {exc!r} {exc}".casefold()
+            error_obj = getattr(exc, "error", None)
+            is_reset = bool(
+                error_obj is not None
+                and callable(getattr(error_obj, "is_reset", None))
+                and error_obj.is_reset()
+            )
             cursor_belongs_to_another_app = (
                 "cursor is for a different app" in error_text
-                or ('invalid "cursor" parameter' in error_text and "different app" in error_text)
+                or ("invalid" in error_text and "cursor" in error_text and "different app" in error_text)
             )
             if state.cursor and (is_reset or cursor_belongs_to_another_app):
-                # Dropbox cursors are app-specific. When OAuth credentials change
-                # to a different Dropbox app, rebuild the inventory from the root.
-                # Existing DropboxFile rows are retained and reconciled by Dropbox ID.
+                # Dropbox cursors are app-specific. Rebuild the inventory from the
+                # configured root. Existing DropboxFile rows remain untouched and
+                # are reconciled by Dropbox file ID during the normal upsert below.
                 records, next_cursor = reset_cursor()
             else:
                 raise
