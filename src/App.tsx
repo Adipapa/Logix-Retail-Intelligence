@@ -276,10 +276,16 @@ export default function App() {
     try {
       const result = await apiDropboxSync();
       setAuthNotice(`Dropbox sync completed: ${result.files_seen} files checked; ${result.new_or_changed} new or revised; ${result.tracked_workbooks} tracked. Extraction attempted: ${result.imports_attempted ?? 0}; succeeded: ${result.imports_succeeded ?? 0}; failed: ${result.imports_failed ?? 0}.`);
-      const analytics = await apiAnalyticsOverview({ year: filters.year, month: filters.month, station: filters.stationId === 'ALL' ? undefined : filters.stationId });
-      setLiveAnalytics(analytics);
-      const production = await apiProductionReports({ year: filters.year, month: filters.month, station: filters.stationId === 'ALL' ? undefined : filters.stationId });
+      const requestFilters = { year: filters.year, month: filters.month, station: filters.stationId === 'ALL' ? undefined : filters.stationId };
+      const production = await apiProductionReports(requestFilters);
       setProductionData(production);
+      setProductionDataError(null);
+      try {
+        setLiveAnalytics(await apiAnalyticsOverview(requestFilters));
+        setLiveAnalyticsError(null);
+      } catch (analyticsError) {
+        setLiveAnalyticsError(analyticsError instanceof Error ? analyticsError.message : 'Unable to refresh executive analytics.');
+      }
       setProductionMonitor(await apiProductionMonitor());
     } catch (err) {
       setAuthNotice(err instanceof Error ? err.message : 'Dropbox sync failed.');
