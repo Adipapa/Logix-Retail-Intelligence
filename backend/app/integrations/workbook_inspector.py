@@ -93,6 +93,109 @@ def extract_sukuta_day(ws, wsv):
       "formula_calculated_values_source":"Excel cached values; formulas retained in raw cell archive"
     }
 
+
+def extract_kotu_legacy_day(ws):
+    """Extract Kotu's 2022-era daily-sheet layout (shift columns C:H)."""
+    def n(coord):
+        return _number(ws, coord)
+
+    def v(coord):
+        return _value(ws, coord)
+
+    pms_shifts = {
+        "morning": n("C22"),
+        "afternoon": n("E22"),
+        "night": n("G22"),
+    }
+    ago_shifts = {
+        "morning": n("D22"),
+        "afternoon": n("F22"),
+        "night": n("H22"),
+    }
+    pms_total = sum(x for x in pms_shifts.values() if x is not None) if any(x is not None for x in pms_shifts.values()) else None
+    ago_total = sum(x for x in ago_shifts.values() if x is not None) if any(x is not None for x in ago_shifts.values()) else None
+
+    pumps = []
+    island = "1"
+    for row in range(5, 17):
+        if row in (9, 13):
+            island = str((row - 5) // 4 + 1)
+        label = v(f"B{row}")
+        if not label:
+            continue
+        product = "AGO" if "AGO" in str(label).upper() else "PMS"
+        cols = ("D", "F", "H") if product == "AGO" else ("C", "E", "G")
+        morning, afternoon, night = (n(f"{col}{row}") for col in cols)
+        pumps.append({
+            "pump_label": f"{str(label).strip()} · {row}",
+            "product": product,
+            "island": island,
+            "shifts": {
+                "morning": {"opening": None, "closing": morning, "throughput": None},
+                "afternoon": {
+                    "opening": morning, "closing": afternoon,
+                    "throughput": afternoon - morning if morning is not None and afternoon is not None else None,
+                },
+                "night": {
+                    "opening": afternoon, "closing": night,
+                    "throughput": night - afternoon if afternoon is not None and night is not None else None,
+                },
+            },
+        })
+
+    return {
+        "template": "kotu_legacy_v1",
+        "station_name": v("C1") or "KOTU",
+        "report_date": _json_value(v("A1")),
+        "pump_meters": pumps,
+        "meter_totals": {
+            "closing": {"pms": n("G17"), "ago": n("H17")},
+            "opening": {"pms": n("C18"), "ago": n("D18")},
+            "throughput": {
+                "pms": n("G17") - n("C18") if n("G17") is not None and n("C18") is not None else None,
+                "ago": n("H17") - n("D18") if n("H17") is not None and n("D18") is not None else None,
+            },
+            "return_to_tank": {"pms": None, "ago": None},
+            "sales": {"pms": pms_total, "ago": ago_total},
+        },
+        "shift_sales_litres": {
+            "pms": pms_shifts, "ago": ago_shifts,
+            "pms_total": pms_total, "ago_total": ago_total,
+        },
+        "sales_revenue": {
+            "pms_price": n("K16"), "pms_gmd": n("L16"),
+            "ago_price": n("K17"), "ago_gmd": n("L17"),
+            "total_gmd": n("L22") if n("L22") is not None else n("O7"),
+        },
+        "stock_control": {
+            "pms": {
+                "opening": n("K5"), "receipts": n("K6"), "total": n("K7"),
+                "sales": n("K8"), "theoretical": n("K9"), "closing": n("K10"),
+                "difference": n("K11"), "control_ratio": n("K12"),
+            },
+            "ago": {
+                "opening": n("L5"), "receipts": n("L6"), "total": n("L7"),
+                "sales": n("L8"), "theoretical": n("L9"), "closing": n("L10"),
+                "difference": n("L11"), "control_ratio": n("L12"),
+            },
+        },
+        "delivery_totals": {
+            "pms": {"direct": n("C35"), "diversion": n("D35"), "shortage": n("E35"), "received": n("G35")},
+            "ago": {"direct": n("L35"), "diversion": n("M35"), "shortage": n("N35"), "received": n("P35")},
+        },
+        "cash_reconciliation": {
+            "sales": n("O7"), "coupons": n("O8"), "genset": n("O9"),
+            "cheques": n("O10"), "credit_sales": n("O11"), "storage": n("O12"),
+            "qmoney": n("O13"), "cash": n("O15"), "banked": n("O16"),
+            "difference": n("O17"),
+        },
+        "credit_sales": {"amount": n("O11"), "entries": []},
+        "generator": {"runtime_minutes": None, "refuel_gmd": n("O9")},
+        "cashpower": {"kwh": None, "purchase_gmd": None},
+        "notes": v("A67") or "",
+        "formula_calculated_values_source": "Excel cached values; formulas retained in raw cell archive",
+    }
+
 def inspect_workbook(content: bytes, source_path: str):
     keep_vba=source_path.lower().endswith(".xlsm")
     wb=load_workbook(BytesIO(content),data_only=False,keep_vba=keep_vba)
@@ -121,11 +224,29 @@ def inspect_workbook(content: bytes, source_path: str):
             continue
         report_date=parse_sheet_date(name,meta["year"],meta["month"])
         if report_date and cells:
-            station_name=_value(ws,"S2")
-            if station_name: station_from_sheet=str(station_name)
-            daily.append({"date":report_date.isoformat(),"worksheet":name,"cells":cells,
-                "extracted_data":extract_sukuta_day(wsv,wsv) if station_name and str(station_name).strip().upper()=="SUKUTA" else {},
-                "formula_cells_without_cached_value":no_cache})
+            station_name = _value(wsv, "S2") or _value(wsv, "C1") or meta["station_name"]
+            if station_name:
+                station_from_sheet = str(station_name)
+            is_kotu_legacy = (
+                str(station_name or "").strip().upper() == "KOTU"
+                and str(_value(wsv, "C3") or "").strip().upper() == "MORNING"
+                and str(_value(wsv, "E3") or "").strip().upper() == "AFTERNOON"
+                and str(_value(wsv, "G3") or "").strip().upper() == "NIGHT"
+                and str(_value(wsv, "J14") or "").strip().upper() == "SALES SUMMARY"
+            )
+            if is_kotu_legacy:
+                extracted = extract_kotu_legacy_day(wsv)
+            elif str(station_name or "").strip().upper() == "SUKUTA":
+                extracted = extract_sukuta_day(wsv, wsv)
+            else:
+                extracted = {}
+            daily.append({
+                "date": report_date.isoformat(),
+                "worksheet": name,
+                "cells": cells,
+                "extracted_data": extracted,
+                "formula_cells_without_cached_value": no_cache,
+            })
             if no_cache: warnings.append({"worksheet":name,"severity":"warning","message":f"{len(no_cache)} formula cells have no cached calculated value.","cells":no_cache[:100]})
         elif cells: warnings.append({"worksheet":name,"severity":"info","message":"Populated non-daily worksheet retained in inspection report."})
     wb.close(); wb_values.close()
