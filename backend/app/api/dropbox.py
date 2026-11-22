@@ -108,3 +108,37 @@ def sync_now(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Dropbox sync failed: {exc}")
+
+@router.post("/reprocess-legacy-2022")
+def reprocess_legacy_2022(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    # Re-import only the three existing Kotu 2022 workbooks from their current
+    # Dropbox revisions. This refreshes extracted fields without changing source files.
+    legacy_paths = [
+        "/logix retail/kotu/2022/9 kotu daily sales september 2022.xlsm",
+        "/logix retail/kotu/2022/11 kotu daily sales november 2022.xlsm",
+        "/logix retail/kotu/2022/12 kotu daily sales decemmber 2022.xlsm",
+    ]
+    items = db.scalars(
+        select(DropboxFile).where(DropboxFile.path_lower.in_(legacy_paths))
+    ).all()
+    if len(items) != len(legacy_paths):
+        found = {item.path_lower for item in items}
+        missing = [path for path in legacy_paths if path not in found]
+        raise HTTPException(status_code=404, detail=f"Some legacy Kotu 2022 workbooks are not indexed: {missing}")
+
+    for item in items:
+        item.import_status = "pending"
+        item.last_import_error = None
+    db.commit()
+
+    results = process_pending_workbooks(db, limit=len(legacy_paths))
+    succeeded = sum(1 for item in results if item.get("status") == "imported")
+    failed = len(results) - succeeded
+    return {
+        "status": "completed" if failed == 0 else "partial",
+        "workbooks_attempted": len(results),
+        "workbooks_succeeded": succeeded,
+        "workbooks_failed": failed,
+        "results": results,
+    }
+
