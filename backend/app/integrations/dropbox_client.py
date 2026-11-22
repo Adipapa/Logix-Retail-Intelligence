@@ -100,17 +100,54 @@ def _collect(result):
     return entries, result.cursor
 
 
+class DropboxRootNotFound(RuntimeError):
+    pass
+
+
 def scan_folder(cursor: str | None = None):
     client = get_client()
     if cursor:
         result = client.files_list_folder_continue(cursor)
     else:
-        result = client.files_list_folder(
-            settings.dropbox_root_path or "",
-            recursive=True,
-            include_deleted=True,
-            limit=2000,
-        )
+        root_path = settings.dropbox_root_path or ""
+        try:
+            result = client.files_list_folder(
+                root_path,
+                recursive=True,
+                include_deleted=True,
+                limit=2000,
+            )
+        except Exception as exc:
+            error_text = f"{type(exc).__name__}: {exc!r} {exc}".casefold()
+            if "not_found" not in error_text and "not found" not in error_text:
+                raise
+
+            # Diagnose a missing configured folder without scanning the entire account.
+            root_result = client.files_list_folder("", recursive=False, limit=2000)
+            available_folders = sorted(
+                item.name for item in root_result.entries
+                if getattr(item, ".tag", None) == "folder"
+            )
+            configured_name = root_path.rstrip("/").split("/")[-1].casefold()
+            matching = next(
+                (name for name in available_folders if name.casefold() == configured_name),
+                None,
+            )
+            if matching:
+                # Retry with Dropbox's canonical folder spelling.
+                result = client.files_list_folder(
+                    "/" + matching,
+                    recursive=True,
+                    include_deleted=True,
+                    limit=2000,
+                )
+            else:
+                names = ", ".join(available_folders[:40]) or "(no folders returned)"
+                raise DropboxRootNotFound(
+                    f"Configured Dropbox folder '{root_path}' was not found in the connected account. "
+                    f"Folders visible at account root: {names}. Check DROPBOX_ROOT_PATH and confirm "
+                    "the refresh token belongs to the Dropbox account containing Logix Retail."
+                ) from exc
     return _collect(result)
 
 
