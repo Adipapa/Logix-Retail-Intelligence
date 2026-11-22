@@ -126,7 +126,7 @@ def scan_folder(cursor: str | None = None):
             root_result = client.files_list_folder("", recursive=False, limit=2000)
             available_folders = sorted(
                 item.name for item in root_result.entries
-                if getattr(item, ".tag", None) == "folder"
+                if getattr(item, "tag", None) == "folder"
             )
             configured_name = root_path.rstrip("/").split("/")[-1].casefold()
             matching = next(
