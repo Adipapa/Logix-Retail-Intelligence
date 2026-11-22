@@ -28,6 +28,32 @@ def status(_: User = Depends(get_current_user), db: Session = Depends(get_db)):
             and settings.dropbox_app_key
             and settings.dropbox_app_secret
         ) or bool(settings.dropbox_access_token),
+        # Safe diagnostics only: never return credential values.
+        "auth_mode": (
+            "refresh_token"
+            if settings.dropbox_refresh_token
+            and settings.dropbox_app_key
+            and settings.dropbox_app_secret
+            else "access_token"
+            if settings.dropbox_access_token
+            else "not_configured"
+        ),
+        "refresh_token_present": bool(settings.dropbox_refresh_token),
+        "app_key_present": bool(settings.dropbox_app_key),
+        "app_secret_present": bool(settings.dropbox_app_secret),
+        "access_token_present": bool(settings.dropbox_access_token),
+        "refresh_token_has_outer_whitespace": bool(
+            settings.dropbox_refresh_token
+            and settings.dropbox_refresh_token != settings.dropbox_refresh_token.strip()
+        ),
+        "app_key_has_outer_whitespace": bool(
+            settings.dropbox_app_key
+            and settings.dropbox_app_key != settings.dropbox_app_key.strip()
+        ),
+        "app_secret_has_outer_whitespace": bool(
+            settings.dropbox_app_secret
+            and settings.dropbox_app_secret != settings.dropbox_app_secret.strip()
+        ),
         "root_path": settings.dropbox_root_path or "/",
         "last_sync_at": state.last_sync_at.isoformat() if state and state.last_sync_at else None,
         "last_status": state.last_status if state else "never",
