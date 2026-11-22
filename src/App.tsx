@@ -25,7 +25,7 @@ import {
   type WorkspaceData,
 } from './services/workspaceRepository';
 import { buildHistoricalSeedDataset } from './services/seedData';
-import { apiLogin, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionReports, apiProductionMonitor, type LiveAnalyticsOverview, type ProductionReportsResponse, type ProductionMonitorResponse } from './services/api';
+import { apiLogin, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionReports, apiProductionMonitor, apiReprocessLegacy2022, type LiveAnalyticsOverview, type ProductionReportsResponse, type ProductionMonitorResponse } from './services/api';
 import { parseExcelWorkbook } from './services/workbookEngine';
 import type {
   DailyReport,
@@ -196,26 +196,37 @@ export default function App() {
     }
     let active = true;
     const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
+    const requestFilters = { year: filters.year, month: filters.month, station: stationName };
     (async () => {
+      // Load the operational report dataset independently first. An overview
+      // analytics failure must not prevent every other reporting tab from loading.
       try {
-        const analytics = await apiAnalyticsOverview({ year: filters.year, month: filters.month, station: stationName });
-        if (active) {
-          setLiveAnalytics(analytics);
-          setLiveAnalyticsError(null);
-        }
-        const production = await apiProductionReports({ year: filters.year, month: filters.month, station: stationName });
+        const production = await apiProductionReports(requestFilters);
         if (active) {
           setProductionData(production);
           setProductionDataError(null);
         }
-        const monitor = await apiProductionMonitor();
-        if (active) setProductionMonitor(monitor);
       } catch (err) {
         if (active) {
-          const message = err instanceof Error ? err.message : 'Unable to load production data.';
-          setLiveAnalyticsError(message);
-          setProductionDataError(message);
+          setProductionDataError(err instanceof Error ? err.message : 'Unable to load production reports.');
         }
+      }
+      try {
+        const analytics = await apiAnalyticsOverview(requestFilters);
+        if (active) {
+          setLiveAnalytics(analytics);
+          setLiveAnalyticsError(null);
+        }
+      } catch (err) {
+        if (active) {
+          setLiveAnalyticsError(err instanceof Error ? err.message : 'Unable to load executive analytics.');
+        }
+      }
+      try {
+        const monitor = await apiProductionMonitor();
+        if (active) setProductionMonitor(monitor);
+      } catch {
+        if (active) setProductionMonitor(null);
       }
     })();
     return () => { active = false; };
@@ -272,6 +283,28 @@ export default function App() {
       setProductionMonitor(await apiProductionMonitor());
     } catch (err) {
       setAuthNotice(err instanceof Error ? err.message : 'Dropbox sync failed.');
+    }
+  };
+
+  const handleReprocessLegacy2022 = async () => {
+    try {
+      const result = await apiReprocessLegacy2022();
+      const summary = `2022 Kotu reprocessing: ${result.workbooks_succeeded}/${result.workbooks_attempted} workbooks succeeded; ${result.workbooks_failed} failed.`;
+      setAuthNotice(summary);
+      const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
+      const requestFilters = { year: filters.year, month: filters.month, station: stationName };
+      const production = await apiProductionReports(requestFilters);
+      setProductionData(production);
+      setProductionDataError(null);
+      try {
+        setLiveAnalytics(await apiAnalyticsOverview(requestFilters));
+        setLiveAnalyticsError(null);
+      } catch (err) {
+        setLiveAnalyticsError(err instanceof Error ? err.message : 'Unable to refresh executive analytics.');
+      }
+      setProductionMonitor(await apiProductionMonitor());
+    } catch (err) {
+      setAuthNotice(err instanceof Error ? err.message : 'Legacy 2022 workbook reprocessing failed.');
     }
   };
 
@@ -542,6 +575,7 @@ export default function App() {
             auditLogs={productionMonitor?.auditLogs ?? []}
             syncStatus={productionMonitor?.syncStatus}
             onTriggerManualSync={handleTriggerManualSync}
+            onReprocessLegacy2022={handleReprocessLegacy2022}
             onUploadWorkbook={handleUploadWorkbook}
           />
         )}
