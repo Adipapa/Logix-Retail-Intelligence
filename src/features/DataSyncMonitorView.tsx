@@ -26,6 +26,7 @@ interface DataSyncMonitorViewProps {
     trackedWorkbooks: number;
   };
   onTriggerManualSync: () => Promise<void>;
+  onReprocessLegacy2022: () => Promise<void>;
   onUploadWorkbook: (file: File) => Promise<void>;
 }
 
@@ -37,10 +38,12 @@ export function DataSyncMonitorView({
   auditLogs,
   syncStatus,
   onTriggerManualSync,
+  onReprocessLegacy2022,
   onUploadWorkbook,
 }: DataSyncMonitorViewProps) {
   const [activeTab, setActiveTab] = useState<'workbooks' | 'jobs' | 'warnings' | 'syncs' | 'audit'>('workbooks');
   const [syncing, setSyncing] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -53,6 +56,16 @@ export function DataSyncMonitorView({
       await onTriggerManualSync();
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleReprocessLegacy2022 = async () => {
+    setReprocessing(true);
+    setUploadStatus(null);
+    try {
+      await onReprocessLegacy2022();
+    } finally {
+      setReprocessing(false);
     }
   };
 
@@ -115,17 +128,28 @@ export function DataSyncMonitorView({
             </dl>
             {syncStatus?.lastError && <p className="mt-3 text-xs text-red-700">Last sync error: {syncStatus.lastError}</p>}
           </div>
-          <div className="mt-5 pt-4 border-t border-slate-200 flex items-center justify-between gap-3">
+          <div className="mt-5 pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
             <span className="text-xs text-slate-500">Source files in Dropbox remain read-only.</span>
-            <button
-              type="button"
-              disabled={syncing}
-              onClick={handleManualSync}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-slate-900 rounded-md hover:bg-slate-800 disabled:opacity-50 transition-colors cursor-pointer whitespace-nowrap"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} aria-hidden="true" />
-              <span>{syncing ? 'Scanning Dropbox...' : 'Run Manual Sync'}</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={reprocessing || syncing}
+                onClick={handleReprocessLegacy2022}
+                className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 disabled:opacity-50 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${reprocessing ? 'animate-spin' : ''}`} aria-hidden="true" />
+                <span>{reprocessing ? 'Reprocessing 2022...' : 'Reprocess Kotu 2022'}</span>
+              </button>
+              <button
+                type="button"
+                disabled={syncing || reprocessing}
+                onClick={handleManualSync}
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-slate-900 rounded-md hover:bg-slate-800 disabled:opacity-50 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} aria-hidden="true" />
+                <span>{syncing ? 'Scanning Dropbox...' : 'Run Manual Sync'}</span>
+              </button>
+            </div>
           </div>
         </div>
 
