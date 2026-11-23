@@ -634,6 +634,8 @@ export default function App() {
           <ReconciliationView
             reports={filteredReports}
             reconciliations={filteredReconciliations}
+            supportedWorkbooks={productionReconciliations?.supported_workbooks ?? 0}
+            unsupportedWorkbooks={productionReconciliations?.unsupported_workbooks ?? 0}
             onInspectReport={setInspectedReport}
           />
         )}
