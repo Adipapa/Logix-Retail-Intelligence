@@ -65,6 +65,8 @@ export interface LiveAnalyticsOverview {
     pms_litres: number | null;
     ago_litres: number | null;
     coupon_sales_gmd: number | null;
+    pms_revenue_gmd: number | null;
+    ago_revenue_gmd: number | null;
     cash_reconciliation_difference_gmd: number | null;
     pms_stock_difference_litres: number | null;
     ago_stock_difference_litres: number | null;
@@ -76,6 +78,8 @@ export interface LiveAnalyticsOverview {
     pms_litres: number;
     ago_litres: number;
     revenue_gmd: number;
+    pms_revenue_gmd: number;
+    ago_revenue_gmd: number;
     coupon_sales_gmd: number;
     completed_reports: number;
     total_volume_litres: number;
@@ -92,6 +96,8 @@ export interface LiveAnalyticsOverview {
     ago_litres: number | null;
     revenue_gmd: number | null;
     coupon_sales_gmd: number | null;
+    pms_revenue_gmd: number | null;
+    ago_revenue_gmd: number | null;
   }>;
   validation_warning_count: number;
   recent_reports: Array<{
