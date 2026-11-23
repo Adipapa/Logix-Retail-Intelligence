@@ -466,6 +466,35 @@ def _production_report_row(report_id, report_date, station_name, worksheet_name,
     }
 
 
+@router.get("/metadata")
+def production_metadata(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Return filter options without loading report JSON payloads."""
+    available_years = [
+        int(value) for value in db.scalars(
+            select(func.extract("year", DailyReport.report_date)).distinct().order_by(
+                func.extract("year", DailyReport.report_date)
+            )
+        ).all() if value is not None
+    ]
+    names = set(db.scalars(
+        select(StationModel.name).where(StationModel.active.is_(True))
+    ).all())
+    names.update(db.scalars(select(DailyReport.station_name).distinct()).all())
+    stations = {}
+    for value in names:
+        display = _canonical_station(value)
+        stations.setdefault(display.casefold(), {
+            "stationId": display, "canonicalName": display, "territory": ""
+        })
+    return {
+        "years": available_years,
+        "stations": sorted(stations.values(), key=lambda item: item["canonicalName"].casefold()),
+    }
+
+
 @router.get("/reports")
 def production_reports(
     year: int | None = Query(default=None, ge=2000, le=2100),
