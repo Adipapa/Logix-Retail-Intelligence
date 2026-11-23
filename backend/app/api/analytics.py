@@ -425,6 +425,8 @@ def production_reports(
     year: int | None = Query(default=None, ge=2000, le=2100),
     month: int | None = Query(default=None, ge=1, le=12),
     station: str | None = Query(default=None, min_length=1, max_length=160),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=250, ge=1, le=500),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -453,11 +455,17 @@ def production_reports(
     if station:
         statement = statement.where(func.lower(func.trim(DailyReport.station_name)) == station.strip().lower())
 
+    # Bound each request's database and JSON payload. The frontend can request
+    # subsequent pages without forcing the API process to retain the full history.
+    page_rows = db.execute(
+        statement.offset((page - 1) * page_size).limit(page_size + 1)
+    ).all()
+    has_more = len(page_rows) > page_size
+    page_rows = page_rows[:page_size]
+
     reports = []
-    years = set()
     stations = {}
-    result = db.execute(statement.execution_options(stream_results=True, yield_per=100))
-    for row in result:
+    for row in page_rows:
         (report_id, report_date, station_name, worksheet_name, completeness,
          source_reference, imported_at, raw_cells, extracted_data) = row
         data = extracted_data or {}
@@ -497,6 +505,9 @@ def production_reports(
         "years": available_years,
         "stations": sorted(station_options.values(), key=lambda item: item["canonicalName"].casefold()),
         "record_count": len(reports),
+        "page": page,
+        "page_size": page_size,
+        "has_more": has_more,
     }
 
 
