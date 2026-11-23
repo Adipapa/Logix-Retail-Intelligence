@@ -2,7 +2,7 @@ import { AlertTriangle, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import type { CompletenessStatus } from '../types/logix';
 
 interface StatusLabelProps {
-  status: CompletenessStatus | 'matched' | 'within_tolerance' | 'variance_exceeded' | 'missing_summary' | 'completed' | 'completed_with_warnings' | 'failed' | 'partial' | 'error' | 'warning' | 'info';
+  status: CompletenessStatus | 'matched' | 'within_tolerance' | 'variance_exceeded' | 'missing_summary' | 'missing_daily' | 'completed' | 'completed_with_warnings' | 'failed' | 'partial' | 'error' | 'warning' | 'info';
 }
 
 export function StatusLabel({ status }: StatusLabelProps) {
@@ -43,12 +43,13 @@ export function StatusLabel({ status }: StatusLabelProps) {
       );
     case 'incomplete':
     case 'missing_summary':
+    case 'missing_daily':
     case 'info':
       return (
         <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 whitespace-nowrap">
           <Clock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
           <span>
-            {status === 'missing_summary' ? 'Missing summary' : status === 'info' ? 'Notice' : 'Incomplete'}
+            {status === 'missing_summary' ? 'Missing summary' : status === 'missing_daily' ? 'Missing daily data' : status === 'info' ? 'Notice' : 'Incomplete'}
           </span>
         </span>
       );
