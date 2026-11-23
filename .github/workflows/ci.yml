@@ -2,7 +2,7 @@ name: Logix Retail CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, postgres-migration]
   push:
     branches: [postgres-migration]
 
@@ -11,11 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-      - run: npm install
-      - run: npm run build
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run build
 
   backend:
     runs-on: ubuntu-latest
@@ -26,3 +27,6 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -r backend/requirements.txt
       - run: python -m compileall -q backend/app backend/migrations
+      - name: Validate Alembic migration graph
+        working-directory: backend
+        run: alembic heads
