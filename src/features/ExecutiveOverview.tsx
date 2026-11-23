@@ -28,7 +28,7 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
         <p className="mt-1 text-xs text-slate-500">Production reporting from the connected PostgreSQL database.</p>
       </div>
       <div className="text-right text-xs text-slate-500">
-        <div>{dataReady ? formatNumber(liveAnalytics.records.total) : '—'} daily reports in database</div>
+        <div>{liveAnalytics ? formatNumber(liveAnalytics.records.total) : '—'} daily reports in database</div>
         <div>Latest report: {latestDate}</div>
       </div>
     </section>
