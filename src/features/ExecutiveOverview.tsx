@@ -2,16 +2,9 @@ import { AlertTriangle, ArrowUpRight } from 'lucide-react';
 import { FuelComparisonChart, ShiftSplitBars } from '../components/Charts';
 import { formatGmd, formatLitres, formatNumber } from '../lib/formatters';
 import type { LiveAnalyticsOverview } from '../services/api';
-import type { DailyReport, ImportWarning, RouteId, SourceWorkbook, Station, SummaryReconciliation } from '../types/logix';
+import type { RouteId } from '../types/logix';
 
 interface ExecutiveOverviewProps {
-  reports: DailyReport[];
-  stations: Station[];
-  workbooks: SourceWorkbook[];
-  warnings: ImportWarning[];
-  reconciliations: SummaryReconciliation[];
-  onInspectReport: (report: DailyReport) => void;
-  onSelectStation: (stationId: string) => void;
   onNavigate: (route: RouteId) => void;
   liveAnalytics?: LiveAnalyticsOverview | null;
   liveAnalyticsError?: string | null;
@@ -58,13 +51,13 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
             </p>
           </div>
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-700">
-            {formatNumber(liveAnalytics.records.included_in_kpis)} complete days included / {formatNumber(liveAnalytics.records.total)} records
+            {formatNumber(liveAnalytics.records.included_in_kpis)} completed reports included / {formatNumber(liveAnalytics.records.total)} records
           </span>
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Metric label="Mapped fuel revenue" value={formatGmd(liveAnalytics.kpis.revenue_gmd)} detail="GMD · completed days only" />
           <Metric label="PMS volume" value={formatLitres(liveAnalytics.kpis.pms_litres)} detail="Litres · completed days only" />
-          <Metric label="AGO volume" value={formatLitres(liveAnalytics.kpis.ago_litres)} detail="Litres · mapped records" />
+          <Metric label="AGO volume" value={formatLitres(liveAnalytics.kpis.ago_litres)} detail="Litres · completed reports only" />
           <Metric
             label="Coupon sales"
             value={formatGmd(liveAnalytics.kpis.coupon_sales_gmd)}
@@ -86,7 +79,7 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
         <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-950">Monthly fuel volume</h2>
-            <p className="mt-1 text-xs text-slate-500">AGO and PMS totals for completed days in the selected period</p>
+            <p className="mt-1 text-xs text-slate-500">AGO and PMS totals for completed reports in the selected period</p>
             <div className="mt-4">
               <FuelComparisonChart
                 data={liveAnalytics.monthly_trends.map((item) => ({ label: item.month, pmsValue: item.pms_litres, agoValue: item.ago_litres }))}
@@ -103,7 +96,7 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm space-y-5">
             <div>
               <h2 className="text-sm font-semibold text-slate-950">Shift volume distribution</h2>
-              <p className="mt-1 text-xs text-slate-500">Aggregated recorded shift litres across included completed days</p>
+              <p className="mt-1 text-xs text-slate-500">Aggregated recorded shift litres across included completed reports</p>
             </div>
             <ShiftSplitBars label="PMS" morning={liveAnalytics.shift_totals.pms.morning} afternoon={liveAnalytics.shift_totals.pms.afternoon} night={liveAnalytics.shift_totals.pms.night} accentClass="bg-teal-700" />
             <ShiftSplitBars label="AGO" morning={liveAnalytics.shift_totals.ago.morning} afternoon={liveAnalytics.shift_totals.ago.afternoon} night={liveAnalytics.shift_totals.ago.night} accentClass="bg-amber-700" />
