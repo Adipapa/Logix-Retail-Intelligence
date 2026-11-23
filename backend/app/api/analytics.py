@@ -13,6 +13,12 @@ from app.models.user import User
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
+
+class StationTankCapacityInput(BaseModel):
+    station_name: str = Field(min_length=1, max_length=160)
+    pms_tank_capacity_litres: float | None = Field(default=None, gt=0)
+    ago_tank_capacity_litres: float | None = Field(default=None, gt=0)
+
 SHIFT_INPUT_COLUMNS = {
     "morning": ("D", "E"),
     "afternoon": ("F", "G"),
