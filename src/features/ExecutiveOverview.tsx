@@ -77,6 +77,9 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
           <Metric label="Average revenue per report" value={formatGmd(liveAnalytics.kpis.average_revenue_per_completed_report_gmd)} detail="GMD per completed station report with revenue" />
           <Metric label="Average selling price" value={liveAnalytics.kpis.average_selling_price_gmd_per_litre === null ? '—' : `D${liveAnalytics.kpis.average_selling_price_gmd_per_litre.toFixed(2)} / L`} detail={`${formatNumber(liveAnalytics.records.price_calculation_reports)} reports with both revenue and volume`} />
         </section>
+        <p className="text-[11px] text-slate-500">
+          Coupon customer rankings are not shown because the supported workbook layouts currently provide coupon totals, not named coupon transactions.
+        </p>
 
         <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
