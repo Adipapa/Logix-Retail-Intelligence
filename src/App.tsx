@@ -302,9 +302,7 @@ export default function App() {
       const result = await apiDropboxSync();
       setAuthNotice(`Dropbox sync completed: ${result.files_seen} files checked; ${result.new_or_changed} new or revised; ${result.tracked_workbooks} tracked. Extraction attempted: ${result.imports_attempted ?? 0}; succeeded: ${result.imports_succeeded ?? 0}; failed: ${result.imports_failed ?? 0}.`);
       const requestFilters = { year: filters.year, month: filters.month, station: filters.stationId === 'ALL' ? undefined : filters.stationId };
-      const production = await apiProductionReports(requestFilters);
-      setProductionData(production);
-      setProductionDataError(null);
+      setProductionMetadata(await apiProductionMetadata());
       try {
         setLiveAnalytics(await apiAnalyticsOverview(requestFilters));
         setLiveAnalyticsError(null);
@@ -324,9 +322,7 @@ export default function App() {
       setAuthNotice(summary);
       const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
       const requestFilters = { year: filters.year, month: filters.month, station: stationName };
-      const production = await apiProductionReports(requestFilters);
-      setProductionData(production);
-      setProductionDataError(null);
+      setProductionMetadata(await apiProductionMetadata());
       try {
         setLiveAnalytics(await apiAnalyticsOverview(requestFilters));
         setLiveAnalyticsError(null);
