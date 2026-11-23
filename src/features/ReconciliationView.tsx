@@ -6,12 +6,16 @@ interface ReconciliationViewProps {
   reports: DailyReport[];
   reconciliations: SummaryReconciliation[];
   onInspectReport: (report: DailyReport) => void;
+  supportedWorkbooks?: number;
+  unsupportedWorkbooks?: number;
 }
 
 export function ReconciliationView({
   reports,
   reconciliations,
   onInspectReport,
+  supportedWorkbooks = 0,
+  unsupportedWorkbooks = 0,
 }: ReconciliationViewProps) {
   const totalSales = sumNullable(reports.map((r) => r.totalFuelSalesGmd));
   const totalCredit = sumNullable(reports.map((r) => r.creditSalesGmd));
@@ -97,7 +101,10 @@ export function ReconciliationView({
               Daily-Derived vs Workbook SUMMARY Sheet Reconciliation
             </h2>
             <p className="text-xs text-slate-500">
-              Verifies that daily worksheet extractions agree with workbook SUMMARY sheets within tolerance
+              Compares mapped daily-sheet values with cached values in the source workbook SUMMARY sheet
+            </p>
+            <p className="mt-1 text-[11px] text-slate-500">
+              {supportedWorkbooks} workbooks supported · {unsupportedWorkbooks} SUMMARY layouts not yet mapped · volume tolerance ±1 L; financial tolerance ±D1
             </p>
           </div>
           <span className="text-xs font-mono text-slate-500">{reconciliations.length} checks</span>
@@ -142,7 +149,7 @@ export function ReconciliationView({
               ))}
               {reconciliations.length === 0 && (
                 <tr><td colSpan={8} className="py-6 text-center font-sans text-slate-500">
-                  No extracted SUMMARY reconciliation results are stored in the production database.
+                  No comparable daily and SUMMARY values were found for this filter. The workbook may have an unsupported SUMMARY layout or unmapped daily sheets.
                 </td></tr>
               )}
             </tbody>
