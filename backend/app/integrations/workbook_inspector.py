@@ -30,6 +30,21 @@ def identify_path(path: str):
     station = parts[1] if len(parts)>1 and parts[0].lower()=="logix retail" else (parts[0] if len(parts)>1 else None)
     return {"file_name":filename,"station_name":station,"year":year,"month":month}
 
+class _ValueCell:
+    def __init__(self, value):
+        self.value = value
+
+
+class _CachedWorksheet:
+    """Expose cached cell values from the compact inspection map."""
+    def __init__(self, cells):
+        self.cells = cells
+
+    def __getitem__(self, coordinate):
+        cell = self.cells.get(coordinate)
+        return _ValueCell(cell.get("value") if cell else None)
+
+
 def _value(ws, coord):
     value=ws[coord].value
     if isinstance(value,str) and value.startswith("="):
@@ -43,7 +58,7 @@ def _number(ws, coord):
     try: return float(str(value).replace(",","").replace("GMD","").strip())
     except (ValueError,TypeError): return None
 
-def extract_sukuta_day(ws, wsv):
+def extract_sukuta_day(cached_ws, cached_ws):
     # Sukuta's verified Jan-2025 template: meter shifts D/E, F/G, H/I;
     # stock control O:Q; cash reconciliation O:P; deliveries rows 22:25 and 30:33.
     pumps=[]
@@ -198,8 +213,11 @@ def extract_kotu_legacy_day(ws):
 
 def inspect_workbook(content: bytes, source_path: str):
     keep_vba=source_path.lower().endswith(".xlsm")
-    wb=load_workbook(BytesIO(content),data_only=False,keep_vba=keep_vba)
-    wb_values=load_workbook(BytesIO(content),data_only=True,keep_vba=keep_vba)
+    # Read-only mode avoids loading two full copies of large multi-sheet workbooks
+    # into Render's limited memory. Cached formula values are streamed alongside
+    # formula cells and retained in the raw-cell map used by extraction.
+    wb=load_workbook(BytesIO(content),data_only=False,keep_vba=keep_vba,read_only=True)
+    wb_values=load_workbook(BytesIO(content),data_only=True,keep_vba=keep_vba,read_only=True)
     meta=identify_path(source_path)
     daily,warnings,summaries=[],[],[]
     summary_cells={}
@@ -209,33 +227,36 @@ def inspect_workbook(content: bytes, source_path: str):
         name=ws.title
         wsv=wb_values[name]
         cells,no_cache={},[]
-        for row in ws.iter_rows():
-            for cell in row:
+        # Pair streaming worksheet rows so cached values are read once without
+        # random access into the read-only workbook.
+        for row, value_row in zip(ws.iter_rows(), wsv.iter_rows()):
+            for cell, value_cell in zip(row, value_row):
                 if cell.value is None: continue
                 raw=cell.value
                 if isinstance(raw,str) and raw.startswith("="):
-                    cached=wsv[cell.coordinate].value
+                    cached=value_cell.value
                     cells[cell.coordinate]={"formula":raw,"value":_json_value(cached)}
                     if cached is None: no_cache.append(cell.coordinate)
                 else: cells[cell.coordinate]={"value":_json_value(raw)}
+        cached_ws = _CachedWorksheet(cells)
         summaries.append({"name":name,"max_row":ws.max_row,"max_column":ws.max_column,"populated_cells":len(cells),"hidden":ws.sheet_state!="visible"})
         if name.strip().upper()=="SUMMARY":
             summary_cells=cells
             continue
         report_date=parse_sheet_date(name,meta["year"],meta["month"])
         if report_date and cells:
-            station_name = _value(wsv, "S2") or _value(wsv, "C1") or meta["station_name"]
+            station_name = _value(cached_ws, "S2") or _value(cached_ws, "C1") or meta["station_name"]
             if station_name:
                 station_from_sheet = str(station_name)
             is_kotu_legacy = (
                 str(station_name or "").strip().upper() == "KOTU"
-                and str(_value(wsv, "C3") or "").strip().upper() == "MORNING"
-                and str(_value(wsv, "E3") or "").strip().upper() == "AFTERNOON"
-                and str(_value(wsv, "G3") or "").strip().upper() == "NIGHT"
-                and str(_value(wsv, "J14") or "").strip().upper() == "SALES SUMMARY"
+                and str(_value(cached_ws, "C3") or "").strip().upper() == "MORNING"
+                and str(_value(cached_ws, "E3") or "").strip().upper() == "AFTERNOON"
+                and str(_value(cached_ws, "G3") or "").strip().upper() == "NIGHT"
+                and str(_value(cached_ws, "J14") or "").strip().upper() == "SALES SUMMARY"
             )
             if is_kotu_legacy:
-                extracted = extract_kotu_legacy_day(wsv)
+                extracted = extract_kotu_legacy_day(cached_ws)
             elif str(station_name or "").strip().upper() == "SUKUTA":
                 extracted = extract_sukuta_day(wsv, wsv)
             else:
