@@ -114,6 +114,12 @@ export interface ProductionReportsResponse {
   record_count: number;
 }
 
+interface ProductionReportsPage extends ProductionReportsResponse {
+  page: number;
+  page_size: number;
+  has_more: boolean;
+}
+
 export async function apiProductionReports(filters: {
   year?: string;
   month?: string;
@@ -121,16 +127,33 @@ export async function apiProductionReports(filters: {
 } = {}): Promise<ProductionReportsResponse> {
   const token = localStorage.getItem("logix_api_token");
   if (!token) throw new Error("Sign in to load production reports.");
-  const params = new URLSearchParams();
-  if (filters.year && filters.year !== "ALL") params.set("year", filters.year);
-  if (filters.month && filters.month !== "ALL" && filters.year && filters.year !== "ALL") params.set("month", filters.month);
-  if (filters.station && filters.station !== "ALL") params.set("station", filters.station);
-  const query = params.toString();
-  const response = await fetch(`${API_BASE}/api/v1/analytics/reports${query ? `?${query}` : ""}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Unable to load production reports.");
-  return response.json();
+
+  const reports: import("../types/logix").DailyReport[] = [];
+  let page = 1;
+  let metadata: Pick<ProductionReportsResponse, "years" | "stations"> = { years: [], stations: [] };
+
+  // Fetch bounded pages so the API never has to materialize the complete
+  // historical dataset in one request. Existing screens still receive the
+  // same combined response shape.
+  while (true) {
+    const params = new URLSearchParams({ page: String(page), page_size: "250" });
+    if (filters.year && filters.year !== "ALL") params.set("year", filters.year);
+    if (filters.month && filters.month !== "ALL" && filters.year && filters.year !== "ALL") params.set("month", filters.month);
+    if (filters.station && filters.station !== "ALL") params.set("station", filters.station);
+
+    const response = await fetch(`${API_BASE}/api/v1/analytics/reports?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Unable to load production reports.");
+
+    const result: ProductionReportsPage = await response.json();
+    reports.push(...result.reports);
+    metadata = { years: result.years, stations: result.stations };
+    if (!result.has_more) break;
+    page += 1;
+  }
+
+  return { reports, years: metadata.years, stations: metadata.stations, record_count: reports.length };
 }
 
 
