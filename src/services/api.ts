@@ -88,6 +88,7 @@ export interface LiveAnalyticsOverview {
     pms_litres: number | null;
     ago_litres: number | null;
     revenue_gmd: number | null;
+    coupon_sales_gmd: number | null;
   }>;
   validation_warning_count: number;
   recent_reports: Array<{
