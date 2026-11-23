@@ -24,7 +24,7 @@ import {
   type WorkspaceData,
 } from './services/workspaceRepository';
 import { buildHistoricalSeedDataset } from './services/seedData';
-import { apiLogin, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionMetadata, apiUpdateStationTankCapacities, apiProductionReports, apiProductionMonitor, apiReprocessLegacy2022, type LiveAnalyticsOverview, type ProductionMetadataResponse, type ProductionReportsResponse, type ProductionMonitorResponse } from './services/api';
+import { apiLogin, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionMetadata, apiUpdateStationTankCapacities, apiProductionReports, apiProductionMonitor, apiProductionReconciliations, apiReprocessLegacy2022, type LiveAnalyticsOverview, type ProductionMetadataResponse, type ProductionReportsResponse, type ProductionMonitorResponse, type ProductionReconciliationResponse } from './services/api';
 import { parseExcelWorkbook } from './services/workbookEngine';
 import type {
   DailyReport,
@@ -89,6 +89,8 @@ export default function App() {
   const [loadingProductionData, setLoadingProductionData] = useState(false);
   const [loadedReportFilterKey, setLoadedReportFilterKey] = useState<string | null>(null);
   const [productionMonitor, setProductionMonitor] = useState<ProductionMonitorResponse | null>(null);
+  const [productionReconciliations, setProductionReconciliations] = useState<ProductionReconciliationResponse | null>(null);
+  const [productionReconciliationError, setProductionReconciliationError] = useState<string | null>(null);
 
   const [workspace, setWorkspace] = useState<WorkspaceData>(() => emptyWorkspace());
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
@@ -212,6 +214,8 @@ export default function App() {
       setLoadingProductionData(false);
       setLoadedReportFilterKey(null);
       setProductionMonitor(null);
+      setProductionReconciliations(null);
+      setProductionReconciliationError(null);
       return;
     }
     let active = true;
@@ -245,11 +249,13 @@ export default function App() {
 
   useEffect(() => {
     if (!isAuthenticated || !reportRoutes.includes(activeRoute)) return;
-    const filterKey = `${filters.year}|${filters.month}|${filters.stationId}`;
+    const filterKey = `${activeRoute === 'historical' ? 'HISTORY' : 'REPORTS'}|${filters.year}|${filters.month}|${filters.stationId}`;
     if (loadedReportFilterKey === filterKey && productionData !== null) return;
     let active = true;
     const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
-    const requestFilters = { year: filters.year, month: filters.month, station: stationName };
+    const requestFilters = activeRoute === 'historical'
+      ? { station: stationName }
+      : { year: filters.year, month: filters.month, station: stationName };
     setLoadingProductionData(true);
     setProductionDataError(null);
     apiProductionReports(requestFilters)
@@ -269,10 +275,9 @@ export default function App() {
     return () => { active = false; };
   }, [isAuthenticated, activeRoute, filters.year, filters.month, filters.stationId, loadedReportFilterKey, productionData]);
 
-  // The sync monitor is only needed on its own page. Deferring it avoids an
-  // extra database request during sign-in and ordinary dashboard navigation.
+  // Workbook metadata is also used by the station register; load it only on those pages.
   useEffect(() => {
-    if (!isAuthenticated || activeRoute !== 'data-monitor') {
+    if (!isAuthenticated || !['data-monitor', 'stations', 'station-detail'].includes(activeRoute)) {
       if (!isAuthenticated) setProductionMonitor(null);
       return;
     }
@@ -282,6 +287,31 @@ export default function App() {
       .catch(() => { if (active) setProductionMonitor(null); });
     return () => { active = false; };
   }, [isAuthenticated, activeRoute]);
+
+  useEffect(() => {
+    if (!isAuthenticated || activeRoute !== 'reconciliation') {
+      if (!isAuthenticated) {
+        setProductionReconciliations(null);
+        setProductionReconciliationError(null);
+      }
+      return;
+    }
+    let active = true;
+    const station = filters.stationId === 'ALL' ? undefined : filters.stationId;
+    apiProductionReconciliations({
+      year: filters.year,
+      month: filters.month,
+      station,
+    }).then((result) => {
+      if (active) {
+        setProductionReconciliations(result);
+        setProductionReconciliationError(null);
+      }
+    }).catch((err) => {
+      if (active) setProductionReconciliationError(err instanceof Error ? err.message : 'Unable to load production reconciliations.');
+    });
+    return () => { active = false; };
+  }, [isAuthenticated, activeRoute, filters.year, filters.month, filters.stationId]);
 
   const years = productionMetadata?.years ?? [];
 
@@ -311,13 +341,13 @@ export default function App() {
   }, [workspace, filters]);
 
   const filteredReconciliations = useMemo(() => {
-    return workspace.reconciliations.filter((rec) => {
+    return (productionReconciliations?.checks ?? []).filter((rec) => {
       if (filters.stationId !== 'ALL' && rec.stationId !== filters.stationId) return false;
       if (filters.year !== 'ALL' && String(rec.year) !== filters.year) return false;
       if (filters.month !== 'ALL' && String(rec.month) !== filters.month) return false;
       return true;
     });
-  }, [workspace, filters]);
+  }, [productionReconciliations, filters]);
 
   const handleTriggerManualSync = async () => {
     if (!isAuthenticated) {
@@ -530,6 +560,12 @@ export default function App() {
           </div>
         )}
 
+        {productionReconciliationError && activeRoute === 'reconciliation' && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900">
+            Production reconciliation data could not be loaded: {productionReconciliationError}
+          </div>
+        )}
+
         {productionDataError && activeRoute !== 'dashboard' && (
           <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900">
             Production report data could not be loaded: {productionDataError}
@@ -607,6 +643,7 @@ export default function App() {
             allReports={productionData?.reports ?? []}
             stations={productionStations}
             selectedStationId={filters.stationId}
+            fuelFilter={filters.fuelType}
           />
         )}
 
