@@ -154,9 +154,12 @@ def overview(
         counts["complete"] += 1
         pms = _number(shifts_data.get("pms_total"))
         ago = _number(shifts_data.get("ago_total"))
-        revenue = _number((data.get("sales_revenue") or {}).get("total_gmd"))
+        revenue_data = data.get("sales_revenue") or {}
+        revenue = _number(revenue_data.get("total_gmd"))
+        pms_revenue = _number(revenue_data.get("pms_gmd"))
+        ago_revenue = _number(revenue_data.get("ago_gmd"))
         coupon_sales = _number((data.get("cash_reconciliation") or {}).get("coupons"))
-        if any(value is not None and value < 0 for value in (pms, ago, revenue, coupon_sales)):
+        if any(value is not None and value < 0 for value in (pms, ago, revenue, pms_revenue, ago_revenue, coupon_sales)):
             counts["anomalies"] += 1
             continue
 
@@ -165,8 +168,8 @@ def overview(
             "revenue_gmd": revenue,
             "pms_litres": pms,
             "ago_litres": ago,
-            "pms_revenue_gmd": (data.get("sales_revenue") or {}).get("pms_gmd"),
-            "ago_revenue_gmd": (data.get("sales_revenue") or {}).get("ago_gmd"),
+            "pms_revenue_gmd": pms_revenue,
+            "ago_revenue_gmd": ago_revenue,
             "coupon_sales_gmd": coupon_sales,
             "cash_reconciliation_difference_gmd": (data.get("cash_reconciliation") or {}).get("difference"),
             "pms_stock_difference_litres": ((data.get("stock_control") or {}).get("pms") or {}).get("difference"),
@@ -182,8 +185,6 @@ def overview(
         key = name.casefold()
         item = station_totals.setdefault(key, {"station_name": name, "report_count": 0, "pms": [0.0, 0], "ago": [0.0, 0], "revenue": [0.0, 0], "pms_revenue": [0.0, 0], "ago_revenue": [0.0, 0], "coupons": [0.0, 0]})
         item["report_count"] += 1
-        pms_revenue = _number((data.get("sales_revenue") or {}).get("pms_gmd"))
-        ago_revenue = _number((data.get("sales_revenue") or {}).get("ago_gmd"))
         for key, value in (("pms", pms), ("ago", ago), ("revenue", revenue), ("pms_revenue", pms_revenue), ("ago_revenue", ago_revenue), ("coupons", coupon_sales)):
             if value is not None:
                 item[key][0] += value
