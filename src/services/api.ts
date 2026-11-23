@@ -67,6 +67,20 @@ export interface LiveAnalyticsOverview {
     cash_reconciliation_difference_gmd: number | null;
     pms_stock_difference_litres: number | null;
     ago_stock_difference_litres: number | null;
+    average_daily_revenue_gmd: number | null;
+    average_selling_price_gmd_per_litre: number | null;
+  };
+  monthly_trends: Array<{
+    month: string;
+    pms_litres: number;
+    ago_litres: number;
+    revenue_gmd: number;
+    completed_days: number;
+    total_volume_litres: number;
+  }>;
+  shift_totals: {
+    pms: { morning: number; afternoon: number; night: number };
+    ago: { morning: number; afternoon: number; night: number };
   };
   stations: Array<{
     station_name: string;
