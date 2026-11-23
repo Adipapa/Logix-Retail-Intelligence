@@ -222,15 +222,23 @@ export default function App() {
           setLiveAnalyticsError(err instanceof Error ? err.message : 'Unable to load executive analytics.');
         }
       }
-      try {
-        const monitor = await apiProductionMonitor();
-        if (active) setProductionMonitor(monitor);
-      } catch {
-        if (active) setProductionMonitor(null);
-      }
     })();
     return () => { active = false; };
   }, [isAuthenticated, filters.year, filters.month, filters.stationId]);
+
+  // The sync monitor is only needed on its own page. Deferring it avoids an
+  // extra database request during sign-in and ordinary dashboard navigation.
+  useEffect(() => {
+    if (!isAuthenticated || activeRoute !== 'data-monitor') {
+      if (!isAuthenticated) setProductionMonitor(null);
+      return;
+    }
+    let active = true;
+    apiProductionMonitor()
+      .then((monitor) => { if (active) setProductionMonitor(monitor); })
+      .catch(() => { if (active) setProductionMonitor(null); });
+    return () => { active = false; };
+  }, [isAuthenticated, activeRoute]);
 
   const years = productionData?.years ?? [];
 
@@ -286,7 +294,7 @@ export default function App() {
       } catch (analyticsError) {
         setLiveAnalyticsError(analyticsError instanceof Error ? analyticsError.message : 'Unable to refresh executive analytics.');
       }
-      setProductionMonitor(await apiProductionMonitor());
+      if (activeRoute === 'data-monitor') setProductionMonitor(await apiProductionMonitor());
     } catch (err) {
       setAuthNotice(err instanceof Error ? err.message : 'Dropbox sync failed.');
     }
