@@ -2,7 +2,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_admin
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 class StationTankCapacityInput(BaseModel):
     station_name: str = Field(min_length=1, max_length=160)
     pms_tank_capacity_litres: float | None = Field(default=None, gt=0, allow_inf_nan=False)
-    ago_tank_capacity_litres: float | None = Field(default=None, gt=0)
+    ago_tank_capacity_litres: float | None = Field(default=None, gt=0, allow_inf_nan=False)
 
 SHIFT_INPUT_COLUMNS = {
     "morning": ("D", "E"),
@@ -534,13 +534,18 @@ def production_metadata(
     for value in names:
         display = _canonical_station(value)
         configured = capacity_by_name.get((value or "").strip().casefold())
-        stations.setdefault(display.casefold(), {
+        item = stations.setdefault(display.casefold(), {
             "stationId": display,
             "canonicalName": display,
             "territory": "",
-            "tankCapacityPms": configured.pms_tank_capacity_litres if configured else None,
-            "tankCapacityAgo": configured.ago_tank_capacity_litres if configured else None,
+            "tankCapacityPms": None,
+            "tankCapacityAgo": None,
         })
+        if configured:
+            if configured.pms_tank_capacity_litres is not None:
+                item["tankCapacityPms"] = configured.pms_tank_capacity_litres
+            if configured.ago_tank_capacity_litres is not None:
+                item["tankCapacityAgo"] = configured.ago_tank_capacity_litres
     return {
         "years": available_years,
         "stations": sorted(stations.values(), key=lambda item: item["canonicalName"].casefold()),
@@ -560,7 +565,12 @@ def update_station_tank_capacities(
         raise HTTPException(status_code=422, detail="Enter at least one tank capacity.")
     station_key = station_name.casefold()
     station = db.scalar(
-        select(StationModel).where(func.lower(func.trim(StationModel.name)) == station_key)
+        select(StationModel).where(
+            or_(
+                func.lower(func.trim(StationModel.name)) == station_key,
+                StationModel.station_key == station_key[:100],
+            )
+        )
     )
     if station is None:
         station = StationModel(
