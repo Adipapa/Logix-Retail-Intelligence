@@ -88,6 +88,7 @@ export default function App() {
   const [productionData, setProductionData] = useState<ProductionReportsResponse | null>(null);
   const [productionDataError, setProductionDataError] = useState<string | null>(null);
   const [loadingProductionData, setLoadingProductionData] = useState(false);
+  const [loadedReportFilterKey, setLoadedReportFilterKey] = useState<string | null>(null);
   const [productionMonitor, setProductionMonitor] = useState<ProductionMonitorResponse | null>(null);
 
   const [workspace, setWorkspace] = useState<WorkspaceData>(() => emptyWorkspace());
@@ -210,6 +211,7 @@ export default function App() {
       setProductionData(null);
       setProductionDataError(null);
       setLoadingProductionData(false);
+      setLoadedReportFilterKey(null);
       setProductionMonitor(null);
       return;
     }
@@ -244,6 +246,8 @@ export default function App() {
 
   useEffect(() => {
     if (!isAuthenticated || !reportRoutes.includes(activeRoute)) return;
+    const filterKey = `${filters.year}|${filters.month}|${filters.stationId}`;
+    if (loadedReportFilterKey === filterKey && productionData !== null) return;
     let active = true;
     const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
     const requestFilters = { year: filters.year, month: filters.month, station: stationName };
@@ -253,6 +257,7 @@ export default function App() {
       .then((production) => {
         if (active) {
           setProductionData(production);
+          setLoadedReportFilterKey(filterKey);
           setProductionDataError(null);
         }
       })
@@ -263,7 +268,7 @@ export default function App() {
         if (active) setLoadingProductionData(false);
       });
     return () => { active = false; };
-  }, [isAuthenticated, activeRoute, filters.year, filters.month, filters.stationId]);
+  }, [isAuthenticated, activeRoute, filters.year, filters.month, filters.stationId, loadedReportFilterKey, productionData]);
 
   // The sync monitor is only needed on its own page. Deferring it avoids an
   // extra database request during sign-in and ordinary dashboard navigation.
