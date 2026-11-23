@@ -121,6 +121,21 @@ export async function apiAnalyticsOverview(filters: {
 }
 
 
+export interface ProductionMetadataResponse {
+  years: number[];
+  stations: Array<{ stationId: string; canonicalName: string; territory: string }>;
+}
+
+export async function apiProductionMetadata(): Promise<ProductionMetadataResponse> {
+  const token = localStorage.getItem("logix_api_token");
+  if (!token) throw new Error("Sign in to load production metadata.");
+  const response = await fetch(`${API_BASE}/api/v1/analytics/metadata`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Unable to load production metadata.");
+  return response.json();
+}
+
 export interface ProductionReportsResponse {
   reports: import("../types/logix").DailyReport[];
   years: number[];
