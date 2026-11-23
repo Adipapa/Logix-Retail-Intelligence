@@ -16,7 +16,6 @@ import { sanitizeId } from './lib/formatters';
 import {
   commitParsedWorkbookBundle,
   deleteReportPreset,
-  getOrCreateUserProfile,
   loadWorkspaceData,
   logAuditAction,
   recordManualSyncRun,
