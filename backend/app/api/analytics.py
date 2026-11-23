@@ -478,7 +478,6 @@ def production_reports(
             source_reference, imported_at, raw_cells, data
         )
         reports.append(report)
-        years.add(report_date.year)
         key = (station_name or "Unresolved station").strip().casefold()
         display = _canonical_station(station_name)
         if key not in stations:
