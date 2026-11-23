@@ -1,4 +1,5 @@
 import { AlertTriangle, ArrowUpRight } from 'lucide-react';
+import { FuelComparisonChart, ShiftSplitBars } from '../components/Charts';
 import { formatGmd, formatLitres, formatNumber } from '../lib/formatters';
 import type { LiveAnalyticsOverview } from '../services/api';
 import type { DailyReport, ImportWarning, RouteId, SourceWorkbook, Station, SummaryReconciliation } from '../types/logix';
@@ -68,7 +69,39 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Metric label="Average daily revenue" value={formatGmd(liveAnalytics.kpis.average_daily_revenue_gmd)} detail="GMD per included completed day" />
+          <Metric label="Average selling price" value={liveAnalytics.kpis.average_selling_price_gmd_per_litre === null ? '—' : `D${liveAnalytics.kpis.average_selling_price_gmd_per_litre.toFixed(2)} / L`} detail="Mapped fuel revenue ÷ mapped litres" />
+        </section>
+
+        <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-950">Monthly fuel volume</h2>
+            <p className="mt-1 text-xs text-slate-500">AGO and PMS totals for completed days in the selected period</p>
+            <div className="mt-4">
+              <FuelComparisonChart
+                data={liveAnalytics.monthly_trends.map((item) => ({ label: item.month, pmsValue: item.pms_litres, agoValue: item.ago_litres }))}
+                unit="L"
+              />
+            </div>
+            <div className="mt-3 divide-y divide-slate-100">
+              {liveAnalytics.monthly_trends.map((item) => <div key={item.month} className="flex justify-between gap-3 py-2 text-xs">
+                <span className="font-medium text-slate-700">{item.month} · {item.completed_days} completed days</span>
+                <span className="font-mono tabular-nums text-slate-900">{formatGmd(item.revenue_gmd)}</span>
+              </div>)}
+            </div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm space-y-5">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-950">Shift volume distribution</h2>
+              <p className="mt-1 text-xs text-slate-500">Aggregated recorded shift litres across included completed days</p>
+            </div>
+            <ShiftSplitBars label="PMS" morning={liveAnalytics.shift_totals.pms.morning} afternoon={liveAnalytics.shift_totals.pms.afternoon} night={liveAnalytics.shift_totals.pms.night} accentClass="bg-teal-700" />
+            <ShiftSplitBars label="AGO" morning={liveAnalytics.shift_totals.ago.morning} afternoon={liveAnalytics.shift_totals.ago.afternoon} night={liveAnalytics.shift_totals.ago.night} accentClass="bg-amber-700" />
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between gap-2">
             <div><h2 className="text-sm font-semibold text-slate-950">Station performance</h2>
