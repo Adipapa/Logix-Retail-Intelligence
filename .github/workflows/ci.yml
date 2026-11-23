@@ -39,3 +39,33 @@ jobs:
       - name: Import FastAPI application
         working-directory: backend
         run: python -c "from app.main import app; print(app.title)"
+      - name: Verify additive migration preserves existing station data
+        working-directory: backend
+        env:
+          DATABASE_URL: sqlite:///./ci-existing.db
+        run: |
+          python - <<'PY'
+          import sqlite3
+          connection = sqlite3.connect("ci-existing.db")
+          connection.execute(
+              "CREATE TABLE stations (id INTEGER PRIMARY KEY, station_key VARCHAR(100) NOT NULL, name VARCHAR(160) NOT NULL, folder_path TEXT NOT NULL, active BOOLEAN NOT NULL)"
+          )
+          connection.execute(
+              "INSERT INTO stations (id, station_key, name, folder_path, active) VALUES (1, 'test-station', 'Test Station', '/test', 1)"
+          )
+          connection.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+          connection.execute("INSERT INTO alembic_version (version_num) VALUES ('0001_initial')")
+          connection.commit()
+          connection.close()
+          PY
+          alembic upgrade head
+          python - <<'PY'
+          import sqlite3
+          connection = sqlite3.connect("ci-existing.db")
+          columns = {row[1] for row in connection.execute("PRAGMA table_info(stations)")}
+          assert "pms_tank_capacity_litres" in columns
+          assert "ago_tank_capacity_litres" in columns
+          row = connection.execute("SELECT name, folder_path FROM stations WHERE id = 1").fetchone()
+          assert row == ("Test Station", "/test"), row
+          connection.close()
+          PY
