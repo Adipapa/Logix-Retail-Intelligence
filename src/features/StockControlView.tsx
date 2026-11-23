@@ -7,6 +7,31 @@ interface StockControlViewProps {
   onInspectReport: (report: DailyReport) => void;
 }
 
+
+function TankVisual({ label, litres, scaleMax, tone, source }: {
+  label: string; litres: number | null; scaleMax: number;
+  tone: 'pms' | 'ago'; source: string;
+}) {
+  const fill = litres === null ? 0 : Math.max(0, Math.min(100, (litres / scaleMax) * 100));
+  const liquid = tone === 'pms' ? 'bg-sky-500' : 'bg-amber-500';
+  const textTone = tone === 'pms' ? 'text-sky-800' : 'text-amber-800';
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 min-w-0">
+      <div className="relative h-24 w-14 shrink-0 overflow-hidden rounded-t-xl rounded-b-lg border-[3px] border-slate-400 bg-white">
+        <div className={`absolute inset-x-0 bottom-0 ${liquid} opacity-80 transition-[height] duration-1000 ease-in-out`} style={{ height: `${fill}%` }} />
+        <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-slate-400/70" />
+        <div className="absolute inset-x-0 top-1/4 border-t border-dashed border-slate-400/50" />
+      </div>
+      <div className="min-w-0">
+        <div className={`text-xs font-semibold ${textTone}`}>{label}</div>
+        <div className="mt-1 text-lg font-semibold font-mono tabular-nums text-slate-900">{litres === null ? '—' : `${Math.round(litres).toLocaleString()} L`}</div>
+        <div className="mt-1 text-[11px] text-slate-500">{source}</div>
+        <div className="mt-1 text-[10px] text-slate-400">Relative visual scale</div>
+      </div>
+    </div>
+  );
+}
+
 export function StockControlView({ reports, fuelFilter, onInspectReport }: StockControlViewProps) {
   const showPms = fuelFilter === 'ALL' || fuelFilter === 'PMS';
   const showAgo = fuelFilter === 'ALL' || fuelFilter === 'AGO';
@@ -60,6 +85,49 @@ export function StockControlView({ reports, fuelFilter, onInspectReport }: Stock
           </>
         )}
       </section>
+
+      {(() => {
+        const latestByStation = new Map<string, DailyReport>();
+        for (const report of reports) {
+          const key = report.stationName.trim().toLowerCase();
+          const previous = latestByStation.get(key);
+          if (!previous || report.reportDate > previous.reportDate) latestByStation.set(key, report);
+        }
+        const latest = [...latestByStation.values()].sort((a, b) => a.stationName.localeCompare(b.stationName));
+        const tankValues = latest.flatMap((report) => [
+          report.pmsClosingStock ?? report.pmsTheoreticalStock,
+          report.agoClosingStock ?? report.agoTheoreticalStock,
+        ]).filter((value): value is number => value !== null && Number.isFinite(value) && value > 0);
+        const scaleMax = Math.max(...tankValues, 1);
+        return (
+          <section className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">Station Tank Monitoring</h2>
+                <p className="mt-1 text-xs text-slate-500">Latest stock-control reading in the selected period. Uses dip closing stock when available, otherwise theoretical closing stock.</p>
+              </div>
+              <span className="text-xs text-slate-500">{latest.length} stations</span>
+            </div>
+            {latest.length === 0 ? (
+              <div className="rounded-md bg-slate-50 p-6 text-center text-sm text-slate-500">No stock-control readings are available for the selected filters.</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {latest.map((report) => (
+                  <div key={report.stationName} className="rounded-lg border border-slate-200 p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-slate-900">{report.stationName}</h3>
+                      <span className="text-[11px] text-slate-500">{report.reportDate}</span>
+                    </div>
+                    {showPms && <TankVisual label="PMS" litres={report.pmsClosingStock ?? report.pmsTheoreticalStock} scaleMax={scaleMax} tone="pms" source={report.pmsClosingStock !== null ? "Dip closing stock" : report.pmsTheoreticalStock !== null ? "Theoretical stock" : "No reading"} />}
+                    {showAgo && <TankVisual label="AGO" litres={report.agoClosingStock ?? report.agoTheoreticalStock} scaleMax={scaleMax} tone="ago" source={report.agoClosingStock !== null ? "Dip closing stock" : report.agoTheoreticalStock !== null ? "Theoretical stock" : "No reading"} />}
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-[11px] text-slate-500">The animation compares available stock levels across the stations currently shown; it is not a tank-capacity percentage. Tank capacities have not yet been configured.</p>
+          </section>
+        );
+      })()}
 
       <section className="bg-white border border-slate-200 rounded-md p-5">
         <div className="flex items-center justify-between mb-3">
