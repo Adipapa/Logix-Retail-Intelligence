@@ -8,6 +8,11 @@ interface ReconciliationViewProps {
   onInspectReport: (report: DailyReport) => void;
   supportedWorkbooks?: number;
   unsupportedWorkbooks?: number;
+  page?: number;
+  pageSize?: number;
+  totalChecks?: number;
+  hasMore?: boolean;
+  onPageChange?: (page: number) => void;
 }
 
 export function ReconciliationView({
@@ -16,6 +21,11 @@ export function ReconciliationView({
   onInspectReport,
   supportedWorkbooks = 0,
   unsupportedWorkbooks = 0,
+  page = 1,
+  pageSize = 100,
+  totalChecks = reconciliations.length,
+  hasMore = false,
+  onPageChange,
 }: ReconciliationViewProps) {
   const totalSales = sumNullable(reports.map((r) => r.totalFuelSalesGmd));
   const totalCredit = sumNullable(reports.map((r) => r.creditSalesGmd));
@@ -156,6 +166,17 @@ export function ReconciliationView({
           </table>
         </div>
       </section>
+
+      <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
+        <span>
+          {totalChecks === 0 ? 'No reconciliation checks' : `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, totalChecks)} of ${totalChecks.toLocaleString()} checks`}
+        </span>
+        <div className="flex items-center gap-2">
+          <button type="button" disabled={page <= 1} onClick={() => onPageChange?.(page - 1)} className="rounded border border-slate-300 px-3 py-1.5 disabled:opacity-40">Previous</button>
+          <span>Page {page}</span>
+          <button type="button" disabled={!hasMore} onClick={() => onPageChange?.(page + 1)} className="rounded border border-slate-300 px-3 py-1.5 disabled:opacity-40">Next</button>
+        </div>
+      </div>
 
       {/* Daily Financial Ledger */}
       <section className="bg-white border border-slate-200 rounded-md p-5">
