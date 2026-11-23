@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowUpRight, FolderOpen } from 'lucide-react';
 import { FuelComparisonChart } from '../components/Charts';
 import { StatusLabel } from '../components/StatusLabel';
@@ -28,7 +28,7 @@ function TankCapacityEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const pmsValue = pms.trim() ? Number(pms) : null;
     const agoValue = ago.trim() ? Number(ago) : null;
