@@ -92,6 +92,7 @@ def overview(
     # 512 MiB memory limit on the production dataset.
     stream_query = (
         select(
+            DailyReport.report_date,
             DailyReport.station_name,
             DailyReport.raw_cells,
             DailyReport.extracted_data,
@@ -116,11 +117,16 @@ def overview(
         "ago_stock_difference_litres": [0.0, 0],
     }
     station_totals = {}
+    monthly_totals = {}
+    shift_totals = {
+        "pms": {"morning": 0.0, "afternoon": 0.0, "night": 0.0},
+        "ago": {"morning": 0.0, "afternoon": 0.0, "night": 0.0},
+    }
 
     result = db.execute(
         stream_query.execution_options(stream_results=True, yield_per=100)
     )
-    for station_name, raw_cells, extracted_data in result:
+    for report_date, station_name, raw_cells, extracted_data in result:
         data = extracted_data or {}
         shifts_data = data.get("shift_sales_litres") or {}
         if not (data.get("template") and shifts_data):
@@ -162,6 +168,26 @@ def overview(
             if value is not None:
                 item[key][0] += value
                 item[key][1] += 1
+
+        month_key = report_date.strftime("%Y-%m")
+        month_item = monthly_totals.setdefault(month_key, {
+            "month": month_key, "pms_litres": 0.0, "ago_litres": 0.0,
+            "revenue_gmd": 0.0, "completed_days": 0,
+        })
+        month_item["completed_days"] += 1
+        if pms is not None:
+            month_item["pms_litres"] += pms
+        if ago is not None:
+            month_item["ago_litres"] += ago
+        if revenue is not None:
+            month_item["revenue_gmd"] += revenue
+
+        for product_key in ("pms", "ago"):
+            product_shifts = shifts_data.get(product_key) or {}
+            for shift_key in ("morning", "afternoon", "night"):
+                shift_value = _number(product_shifts.get(shift_key))
+                if shift_value is not None:
+                    shift_totals[product_key][shift_key] += shift_value
 
     stations = [
         {
@@ -234,7 +260,27 @@ def overview(
             "excluded_anomalies": counts["anomalies"],
             "raw_or_unmapped": total - counts["mapped"],
         },
-        "kpis": {key: _nullable(*value) for key, value in sums.items()},
+        "kpis": {
+            **{key: _nullable(*value) for key, value in sums.items()},
+            "average_daily_revenue_gmd": round(sums["revenue_gmd"][0] / counts["included"], 2) if counts["included"] and sums["revenue_gmd"][1] else None,
+            "average_selling_price_gmd_per_litre": round(
+                sums["revenue_gmd"][0] / (sums["pms_litres"][0] + sums["ago_litres"][0]), 4
+            ) if sums["revenue_gmd"][1] and (sums["pms_litres"][0] + sums["ago_litres"][0]) > 0 else None,
+        },
+        "monthly_trends": [
+            {
+                **item,
+                "pms_litres": round(item["pms_litres"], 2),
+                "ago_litres": round(item["ago_litres"], 2),
+                "revenue_gmd": round(item["revenue_gmd"], 2),
+                "total_volume_litres": round(item["pms_litres"] + item["ago_litres"], 2),
+            }
+            for _, item in sorted(monthly_totals.items())
+        ],
+        "shift_totals": {
+            product: {shift: round(value, 2) for shift, value in shifts.items()}
+            for product, shifts in shift_totals.items()
+        },
         "stations": stations,
         "validation_warning_count": warning_count,
         "recent_reports": recent_reports,
