@@ -110,6 +110,7 @@ def overview(
         stream_query = stream_query.where(DailyReport.station_name.ilike(station))
 
     counts = {"mapped": 0, "complete": 0, "pending": 0, "included": 0, "anomalies": 0}
+    missing_shift_entries = {"morning": 0, "afternoon": 0, "night": 0}
     sums = {
         "revenue_gmd": [0.0, 0], "pms_litres": [0.0, 0], "ago_litres": [0.0, 0],
         "coupon_sales_gmd": [0.0, 0],
@@ -134,7 +135,11 @@ def overview(
             continue
 
         counts["mapped"] += 1
-        if not all(_shift_entry_status(raw_cells).values()):
+        shift_status = _shift_entry_status(raw_cells)
+        for shift_name, entered in shift_status.items():
+            if not entered:
+                missing_shift_entries[shift_name] += 1
+        if not all(shift_status.values()):
             counts["pending"] += 1
             continue
 
@@ -288,6 +293,7 @@ def overview(
             product: {shift: round(value, 2) for shift, value in shifts.items()}
             for product, shifts in shift_totals.items()
         },
+        "missing_shift_entries": missing_shift_entries,
         "stations": stations,
         "validation_warning_count": warning_count,
         "recent_reports": recent_reports,
