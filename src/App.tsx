@@ -91,6 +91,7 @@ export default function App() {
   const [productionMonitor, setProductionMonitor] = useState<ProductionMonitorResponse | null>(null);
   const [productionReconciliations, setProductionReconciliations] = useState<ProductionReconciliationResponse | null>(null);
   const [productionReconciliationError, setProductionReconciliationError] = useState<string | null>(null);
+  const [reconciliationPage, setReconciliationPage] = useState(1);
 
   const [workspace, setWorkspace] = useState<WorkspaceData>(() => emptyWorkspace());
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
@@ -302,6 +303,7 @@ export default function App() {
       year: filters.year,
       month: filters.month,
       station,
+      page: reconciliationPage,
     }).then((result) => {
       if (active) {
         setProductionReconciliations(result);
@@ -311,7 +313,7 @@ export default function App() {
       if (active) setProductionReconciliationError(err instanceof Error ? err.message : 'Unable to load production reconciliations.');
     });
     return () => { active = false; };
-  }, [isAuthenticated, activeRoute, filters.year, filters.month, filters.stationId]);
+  }, [isAuthenticated, activeRoute, filters.year, filters.month, filters.stationId, reconciliationPage]);
 
   const years = productionMetadata?.years ?? [];
 
@@ -636,6 +638,11 @@ export default function App() {
             reconciliations={filteredReconciliations}
             supportedWorkbooks={productionReconciliations?.supported_workbooks ?? 0}
             unsupportedWorkbooks={productionReconciliations?.unsupported_workbooks ?? 0}
+            page={reconciliationPage}
+            pageSize={productionReconciliations?.page_size ?? 100}
+            totalChecks={productionReconciliations?.check_count ?? 0}
+            hasMore={productionReconciliations?.has_more ?? false}
+            onPageChange={setReconciliationPage}
             onInspectReport={setInspectedReport}
           />
         )}
