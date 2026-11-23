@@ -20,6 +20,9 @@ jobs:
 
   backend:
     runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: ci-only-secret-key-not-used
+      DATABASE_URL: sqlite:///./ci-test.db
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
