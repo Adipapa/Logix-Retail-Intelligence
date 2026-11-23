@@ -161,7 +161,7 @@ export interface SummaryReconciliation {
   summaryValue: number | null;
   variance: number | null;
   tolerance: number;
-  result: 'matched' | 'within_tolerance' | 'variance_exceeded' | 'missing_summary';
+  result: 'matched' | 'within_tolerance' | 'variance_exceeded' | 'missing_summary' | 'missing_daily';
   createdAt: string;
 }
 
