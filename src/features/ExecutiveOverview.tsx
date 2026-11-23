@@ -89,7 +89,7 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
             <div className="mt-3 divide-y divide-slate-100">
               {liveAnalytics.monthly_trends.map((item) => <div key={item.month} className="flex justify-between gap-3 py-2 text-xs">
                 <span className="font-medium text-slate-700">{item.month} · {item.completed_reports} completed reports</span>
-                <span className="font-mono tabular-nums text-slate-900">{formatGmd(item.revenue_gmd)}</span>
+                <span className="text-right font-mono tabular-nums text-slate-900">{formatGmd(item.revenue_gmd)}<span className="block text-[10px] text-slate-500">Coupons {formatGmd(item.coupon_sales_gmd)}</span></span>
               </div>)}
             </div>
           </div>
@@ -121,7 +121,11 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
           {liveAnalytics.stations.length ? <div className="divide-y divide-slate-100">
             {liveAnalytics.stations.map((station) => <div key={station.station_name} className="grid grid-cols-2 gap-2 py-3 text-xs">
               <div className="font-semibold text-slate-800">{station.station_name}<div className="mt-1 font-normal text-slate-500">{formatNumber(station.report_count)} reports</div></div>
-              <div className="text-right font-mono tabular-nums text-slate-800">{formatGmd(station.revenue_gmd)}<div className="mt-1 text-slate-500">{formatLitres((station.pms_litres ?? 0) + (station.ago_litres ?? 0))}</div></div>
+              <div className="text-right font-mono tabular-nums text-slate-800">
+                {formatGmd(station.revenue_gmd)}
+                <div className="mt-1 text-slate-500">{formatLitres((station.pms_litres ?? 0) + (station.ago_litres ?? 0))}</div>
+                <div className="mt-1 text-[10px] text-slate-500">PMS {formatGmd(station.pms_revenue_gmd)} · AGO {formatGmd(station.ago_revenue_gmd)}</div>
+              </div>
             </div>)}
           </div> : <p className="py-6 text-xs text-slate-500">No mapped station totals are available for this period.</p>}
         </div>
