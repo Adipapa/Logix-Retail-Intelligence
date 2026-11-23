@@ -128,6 +128,7 @@ def overview(
     }
     station_totals = {}
     monthly_totals = {}
+    price_totals = {"revenue_gmd": 0.0, "volume_litres": 0.0, "paired_reports": 0}
     shift_totals = {
         "pms": {"morning": 0.0, "afternoon": 0.0, "night": 0.0},
         "ago": {"morning": 0.0, "afternoon": 0.0, "night": 0.0},
@@ -164,6 +165,10 @@ def overview(
             continue
 
         counts["included"] += 1
+        if revenue is not None and pms is not None and ago is not None:
+            price_totals["revenue_gmd"] += revenue
+            price_totals["volume_litres"] += pms + ago
+            price_totals["paired_reports"] += 1
         values = {
             "revenue_gmd": revenue,
             "pms_litres": pms,
@@ -290,13 +295,16 @@ def overview(
             "included_in_kpis": counts["included"],
             "excluded_anomalies": counts["anomalies"],
             "raw_or_unmapped": total - counts["mapped"],
+            "coupon_sales_reports": sums["coupon_sales_gmd"][1],
+            "revenue_reports": sums["revenue_gmd"][1],
+            "price_calculation_reports": price_totals["paired_reports"],
         },
         "kpis": {
             **{key: _nullable(*value) for key, value in sums.items()},
             "average_revenue_per_completed_report_gmd": round(sums["revenue_gmd"][0] / sums["revenue_gmd"][1], 2) if sums["revenue_gmd"][1] else None,
             "average_selling_price_gmd_per_litre": round(
-                sums["revenue_gmd"][0] / (sums["pms_litres"][0] + sums["ago_litres"][0]), 4
-            ) if sums["revenue_gmd"][1] and (sums["pms_litres"][0] + sums["ago_litres"][0]) > 0 else None,
+                price_totals["revenue_gmd"] / price_totals["volume_litres"], 4
+            ) if price_totals["paired_reports"] and price_totals["volume_litres"] > 0 else None,
         },
         "monthly_trends": [
             {
