@@ -100,6 +100,14 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
             </div>
             <ShiftSplitBars label="PMS" morning={liveAnalytics.shift_totals.pms.morning} afternoon={liveAnalytics.shift_totals.pms.afternoon} night={liveAnalytics.shift_totals.pms.night} accentClass="bg-teal-700" />
             <ShiftSplitBars label="AGO" morning={liveAnalytics.shift_totals.ago.morning} afternoon={liveAnalytics.shift_totals.ago.afternoon} night={liveAnalytics.shift_totals.ago.night} accentClass="bg-amber-700" />
+            <div className="border-t border-slate-100 pt-3">
+              <div className="text-xs font-semibold text-slate-800">Missing shift entries in mapped reports</div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-600">
+                <div>Morning: <strong className="font-mono tabular-nums text-slate-900">{formatNumber(liveAnalytics.missing_shift_entries.morning)}</strong></div>
+                <div>Afternoon: <strong className="font-mono tabular-nums text-slate-900">{formatNumber(liveAnalytics.missing_shift_entries.afternoon)}</strong></div>
+                <div>Night: <strong className="font-mono tabular-nums text-slate-900">{formatNumber(liveAnalytics.missing_shift_entries.night)}</strong></div>
+              </div>
+            </div>
           </div>
         </section>
 
