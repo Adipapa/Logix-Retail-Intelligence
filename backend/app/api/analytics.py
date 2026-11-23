@@ -120,6 +120,7 @@ def overview(
     missing_shift_entries = {"morning": 0, "afternoon": 0, "night": 0}
     sums = {
         "revenue_gmd": [0.0, 0], "pms_litres": [0.0, 0], "ago_litres": [0.0, 0],
+        "pms_revenue_gmd": [0.0, 0], "ago_revenue_gmd": [0.0, 0],
         "coupon_sales_gmd": [0.0, 0],
         "cash_reconciliation_difference_gmd": [0.0, 0],
         "pms_stock_difference_litres": [0.0, 0],
@@ -164,6 +165,8 @@ def overview(
             "revenue_gmd": revenue,
             "pms_litres": pms,
             "ago_litres": ago,
+            "pms_revenue_gmd": (data.get("sales_revenue") or {}).get("pms_gmd"),
+            "ago_revenue_gmd": (data.get("sales_revenue") or {}).get("ago_gmd"),
             "coupon_sales_gmd": coupon_sales,
             "cash_reconciliation_difference_gmd": (data.get("cash_reconciliation") or {}).get("difference"),
             "pms_stock_difference_litres": ((data.get("stock_control") or {}).get("pms") or {}).get("difference"),
@@ -177,9 +180,11 @@ def overview(
 
         name = _canonical_station(station_name)
         key = name.casefold()
-        item = station_totals.setdefault(key, {"station_name": name, "report_count": 0, "pms": [0.0, 0], "ago": [0.0, 0], "revenue": [0.0, 0], "coupons": [0.0, 0]})
+        item = station_totals.setdefault(key, {"station_name": name, "report_count": 0, "pms": [0.0, 0], "ago": [0.0, 0], "revenue": [0.0, 0], "pms_revenue": [0.0, 0], "ago_revenue": [0.0, 0], "coupons": [0.0, 0]})
         item["report_count"] += 1
-        for key, value in (("pms", pms), ("ago", ago), ("revenue", revenue), ("coupons", coupon_sales)):
+        pms_revenue = _number((data.get("sales_revenue") or {}).get("pms_gmd"))
+        ago_revenue = _number((data.get("sales_revenue") or {}).get("ago_gmd"))
+        for key, value in (("pms", pms), ("ago", ago), ("revenue", revenue), ("pms_revenue", pms_revenue), ("ago_revenue", ago_revenue), ("coupons", coupon_sales)):
             if value is not None:
                 item[key][0] += value
                 item[key][1] += 1
@@ -187,7 +192,8 @@ def overview(
         month_key = report_date.strftime("%Y-%m")
         month_item = monthly_totals.setdefault(month_key, {
             "month": month_key, "pms_litres": 0.0, "ago_litres": 0.0,
-            "revenue_gmd": 0.0, "coupon_sales_gmd": 0.0, "completed_reports": 0,
+            "revenue_gmd": 0.0, "pms_revenue_gmd": 0.0, "ago_revenue_gmd": 0.0,
+            "coupon_sales_gmd": 0.0, "completed_reports": 0,
         })
         month_item["completed_reports"] += 1
         if pms is not None:
@@ -196,6 +202,10 @@ def overview(
             month_item["ago_litres"] += ago
         if revenue is not None:
             month_item["revenue_gmd"] += revenue
+        if pms_revenue is not None:
+            month_item["pms_revenue_gmd"] += pms_revenue
+        if ago_revenue is not None:
+            month_item["ago_revenue_gmd"] += ago_revenue
         if coupon_sales is not None:
             month_item["coupon_sales_gmd"] += coupon_sales
 
@@ -214,6 +224,8 @@ def overview(
             "ago_litres": _nullable(*item["ago"]),
             "revenue_gmd": _nullable(*item["revenue"]),
             "coupon_sales_gmd": _nullable(*item["coupons"]),
+            "pms_revenue_gmd": _nullable(*item["pms_revenue"]),
+            "ago_revenue_gmd": _nullable(*item["ago_revenue"]),
         }
         for name, item in station_totals.items()
     ]
@@ -291,6 +303,8 @@ def overview(
                 "pms_litres": round(item["pms_litres"], 2),
                 "ago_litres": round(item["ago_litres"], 2),
                 "revenue_gmd": round(item["revenue_gmd"], 2),
+                "pms_revenue_gmd": round(item["pms_revenue_gmd"], 2),
+                "ago_revenue_gmd": round(item["ago_revenue_gmd"], 2),
                 "coupon_sales_gmd": round(item["coupon_sales_gmd"], 2),
                 "total_volume_litres": round(item["pms_litres"] + item["ago_litres"], 2),
             }
