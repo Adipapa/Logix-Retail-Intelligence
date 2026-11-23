@@ -1,27 +1,45 @@
 import { FuelComparisonChart } from '../components/Charts';
 import { formatGmd, formatLitres, formatNumber, sumNullable } from '../lib/formatters';
-import type { DailyReport, Station } from '../types/logix';
+import type { DailyReport, FuelFilter, Station } from '../types/logix';
 
 interface HistoricalAnalyticsViewProps {
   allReports: DailyReport[];
   stations: Station[];
   selectedStationId: string;
+  fuelFilter: FuelFilter;
 }
 
 export function HistoricalAnalyticsView({
   allReports,
   stations,
   selectedStationId,
+  fuelFilter,
 }: HistoricalAnalyticsViewProps) {
   const scopedReports =
     selectedStationId === 'ALL'
       ? allReports
       : allReports.filter((r) => r.stationId === selectedStationId);
 
+  const selectedReports = scopedReports.map((report) => ({
+    ...report,
+    pmsTotalLitres: fuelFilter === 'AGO' ? null : report.pmsTotalLitres,
+    agoTotalLitres: fuelFilter === 'PMS' ? null : report.agoTotalLitres,
+    totalFuelSalesGmd: fuelFilter === 'PMS'
+      ? report.pmsSalesGmd
+      : fuelFilter === 'AGO'
+      ? report.agoSalesGmd
+      : report.totalFuelSalesGmd,
+  }));
+
+  const matrixReports = allReports.map((report) => ({
+    ...report,
+    pmsTotalLitres: fuelFilter === 'AGO' ? null : report.pmsTotalLitres,
+    agoTotalLitres: fuelFilter === 'PMS' ? null : report.agoTotalLitres,
+  }));
   const years = Array.from(new Set(scopedReports.map((r) => r.year))).sort((a, b) => a - b);
 
   const annualRows = years.map((yr, idx) => {
-    const yrReports = scopedReports.filter((r) => r.year === yr);
+    const yrReports = selectedReports.filter((r) => r.year === yr);
     const pms = sumNullable(yrReports.map((r) => r.pmsTotalLitres));
     const ago = sumNullable(yrReports.map((r) => r.agoTotalLitres));
     const sales = sumNullable(yrReports.map((r) => r.totalFuelSalesGmd));
@@ -29,7 +47,7 @@ export function HistoricalAnalyticsView({
 
     let yoyChangePct: number | null = null;
     if (idx > 0) {
-      const prevYearReports = scopedReports.filter((r) => r.year === years[idx - 1]);
+      const prevYearReports = selectedReports.filter((r) => r.year === years[idx - 1]);
       const prevAvg =
         prevYearReports.length > 0
           ? sumNullable(prevYearReports.map((r) => r.totalFuelSalesGmd)) / prevYearReports.length
@@ -144,7 +162,7 @@ export function HistoricalAnalyticsView({
                     {st.canonicalName}
                   </td>
                   {years.map((y) => {
-                    const list = allReports.filter((r) => r.stationId === st.stationId && r.year === y);
+                    const list = matrixReports.filter((r) => r.stationId === st.stationId && r.year === y);
                     const totalL = sumNullable(
                       list.map((r) => (r.pmsTotalLitres ?? 0) + (r.agoTotalLitres ?? 0))
                     );

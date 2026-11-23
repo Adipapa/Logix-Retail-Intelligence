@@ -591,6 +591,173 @@ def update_station_tank_capacities(
     }
 
 
+
+def _nested_value(data, path):
+    current = data or {}
+    for key in path.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return _number(current)
+
+
+@router.get("/reconciliations")
+def production_reconciliations(
+    year: int | None = Query(default=None, ge=2000, le=2100),
+    month: int | None = Query(default=None, ge=1, le=12),
+    station: str | None = Query(default=None, min_length=1, max_length=160),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Compare supported SUMMARY worksheet rows with their extracted daily sheets."""
+    field_map = {
+        "morning pms": ("Morning PMS", "PMS", "shift_sales_litres.pms.morning", 1.0),
+        "morning ago": ("Morning AGO", "AGO", "shift_sales_litres.ago.morning", 1.0),
+        "afternoon pms": ("Afternoon PMS", "PMS", "shift_sales_litres.pms.afternoon", 1.0),
+        "afternoon ago": ("Afternoon AGO", "AGO", "shift_sales_litres.ago.afternoon", 1.0),
+        "night pms": ("Night PMS", "PMS", "shift_sales_litres.pms.night", 1.0),
+        "night ago": ("Night AGO", "AGO", "shift_sales_litres.ago.night", 1.0),
+        "pms": ("PMS Total", "PMS", "shift_sales_litres.pms_total", 1.0),
+        "ago": ("AGO Total", "AGO", "shift_sales_litres.ago_total", 1.0),
+        "fuel sales": ("Fuel Sales", "GROUP", "sales_revenue.total_gmd", 1.0),
+        "total credit sales": ("Total Credit Sales", "GROUP", "cash_reconciliation.credit_sales", 1.0),
+        "r/tank (pms)": ("Return to Tank", "PMS", "meter_totals.return_to_tank.pms", 1.0),
+        "r/tank (ago)": ("Return to Tank", "AGO", "meter_totals.return_to_tank.ago", 1.0),
+        "cash-fuel": ("Cash Fuel", "GROUP", "cash_reconciliation.cash", 1.0),
+        "direct (pms)": ("Direct Delivery", "PMS", "delivery_totals.pms.direct", 1.0),
+        "diversion (pms)": ("Diversion", "PMS", "delivery_totals.pms.diversion", 1.0),
+        "shortage (pms)": ("Shortage", "PMS", "delivery_totals.pms.shortage", 1.0),
+        "received (pms)": ("Received", "PMS", "delivery_totals.pms.received", 1.0),
+        "direct (ago)": ("Direct Delivery", "AGO", "delivery_totals.ago.direct", 1.0),
+        "diversion (ago)": ("Diversion", "AGO", "delivery_totals.ago.diversion", 1.0),
+        "shortage (ago)": ("Shortage", "AGO", "delivery_totals.ago.shortage", 1.0),
+        "received (ago)": ("Received", "AGO", "delivery_totals.ago.received", 1.0),
+        "theoretical stock (pms)": ("Theoretical Stock", "PMS", "stock_control.pms.theoretical", 1.0),
+        "opening stock (pms)": ("Opening Stock", "PMS", "stock_control.pms.opening", 1.0),
+        "closing stock (pms)": ("Closing Stock", "PMS", "stock_control.pms.closing", 1.0),
+        "difference (pms)": ("Stock Difference", "PMS", "stock_control.pms.difference", 1.0),
+        "control (pms)": ("Stock Control Ratio", "PMS", "stock_control.pms.control_ratio", 0.005),
+        "theoretical stock (ago)": ("Theoretical Stock", "AGO", "stock_control.ago.theoretical", 1.0),
+        "opening stock (ago)": ("Opening Stock", "AGO", "stock_control.ago.opening", 1.0),
+        "closing stock (ago)": ("Closing Stock", "AGO", "stock_control.ago.closing", 1.0),
+        "difference (ago)": ("Stock Difference", "AGO", "stock_control.ago.difference", 1.0),
+        "control (ago)": ("Stock Control Ratio", "AGO", "stock_control.ago.control_ratio", 0.005),
+        "generator runtime (mins)": ("Generator Runtime", "GROUP", "generator.runtime_minutes", 1.0),
+        "generator refuel (gmd)": ("Generator Refuel", "GROUP", "generator.refuel_gmd", 1.0),
+        "cashpower (kwh)": ("Cashpower Consumption", "GROUP", "cashpower.kwh", 1.0),
+        "cashpower purchase (gmd)": ("Cashpower Purchase", "GROUP", "cashpower.purchase_gmd", 1.0),
+        "coupons": ("Coupons", "GROUP", "cash_reconciliation.coupons", 1.0),
+        "qmoney": ("Qmoney", "GROUP", "cash_reconciliation.qmoney", 1.0),
+        "waychit": ("Waychit", "GROUP", "cash_reconciliation.waychit", 1.0),
+        "cheques": ("Cheques", "GROUP", "cash_reconciliation.cheques", 1.0),
+        "credit sales": ("Credit Sales", "GROUP", "cash_reconciliation.credit_sales", 1.0),
+        "cash": ("Cash", "GROUP", "cash_reconciliation.cash", 1.0),
+        "banked": ("Banked", "GROUP", "cash_reconciliation.banked", 1.0),
+        "difference": ("Cash Reconciliation Difference", "GROUP", "cash_reconciliation.difference", 1.0),
+    }
+    snapshots = db.execute(
+        select(SummarySnapshot, SourceWorkbook)
+        .join(SourceWorkbook, SummarySnapshot.source_workbook_id == SourceWorkbook.id)
+        .order_by(SourceWorkbook.id)
+    ).all()
+    checks = []
+    check_index = 0
+    page_start = (page - 1) * page_size
+    page_end = page_start + page_size
+    supported_workbooks = set()
+    for snapshot, source in snapshots:
+        raw = snapshot.raw_cells or {}
+        headers = {}
+        for coordinate, cell in raw.items():
+            letters = "".join(ch for ch in coordinate if ch.isalpha())
+            digits = "".join(ch for ch in coordinate if ch.isdigit())
+            if digits == "1" and letters:
+                header = str((cell or {}).get("value") or "").strip().casefold()
+                if header in field_map:
+                    headers[letters] = field_map[header]
+        if not headers:
+            continue
+        supported_workbooks.add(source.id)
+        daily_rows = {
+            report.report_date.isoformat(): report
+            for report in db.scalars(
+                select(DailyReport).where(DailyReport.source_workbook_id == source.id)
+            ).all()
+        }
+        for coordinate, cell in raw.items():
+            letters = "".join(ch for ch in coordinate if ch.isalpha())
+            digits = "".join(ch for ch in coordinate if ch.isdigit())
+            if letters != "F" or not digits or digits == "1":
+                continue
+            row_number = int(digits)
+            date_value = (cell or {}).get("value")
+            report_date = str(date_value)[:10] if date_value else ""
+            try:
+                parsed_date = date.fromisoformat(report_date)
+            except ValueError:
+                continue
+            if year is not None and parsed_date.year != year:
+                continue
+            if month is not None and parsed_date.month != month:
+                continue
+            if station and source.file_name and not any(
+                report.station_name.strip().casefold() == station.strip().casefold()
+                for report in daily_rows.values()
+            ):
+                continue
+            daily = daily_rows.get(report_date)
+            station_name = (
+                str((raw.get(f"G{row_number}") or {}).get("value") or
+                    (daily.station_name if daily else "Unresolved station"))
+            )
+            if station and station_name.strip().casefold() != station.strip().casefold():
+                continue
+            for column, (field_name, product, data_path, tolerance) in headers.items():
+                summary_value = _number((raw.get(f"{column}{row_number}") or {}).get("value"))
+                daily_value = _nested_value(daily.extracted_data, data_path) if daily else None
+                variance = round(daily_value - summary_value, 4) if daily_value is not None and summary_value is not None else None
+                if daily_value is None:
+                    result = "missing_daily"
+                elif summary_value is None:
+                    result = "missing_summary"
+                elif abs(variance) <= tolerance:
+                    result = "matched" if abs(variance) < 0.0001 else "within_tolerance"
+                else:
+                    result = "variance_exceeded"
+                if page_start <= check_index < page_end:
+                    checks.append({
+                        "ownerUid": "production",
+                        "reconciliationId": f"{source.id}-{report_date}-{column}",
+                        "workbookId": str(source.id),
+                        "stationId": _canonical_station(station_name),
+                        "stationName": _canonical_station(station_name),
+                        "year": parsed_date.year,
+                        "month": parsed_date.month,
+                        "reportDate": report_date,
+                        "fieldName": field_name,
+                        "product": product,
+                        "dailyDerivedValue": daily_value,
+                        "summaryValue": summary_value,
+                        "variance": variance,
+                        "tolerance": tolerance,
+                        "result": result,
+                        "sourceWorkbook": source.file_name,
+                    })
+                check_index += 1
+    return {
+        "checks": checks,
+        "supported_workbooks": len(supported_workbooks),
+        "total_workbooks_with_summary": len(snapshots),
+        "unsupported_workbooks": max(0, len(snapshots) - len(supported_workbooks)),
+        "check_count": check_index,
+        "page": page,
+        "page_size": page_size,
+        "has_more": check_index > page_end,
+    }
+
+
 @router.get("/reports")
 def production_reports(
     year: int | None = Query(default=None, ge=2000, le=2100),

@@ -6,12 +6,26 @@ interface ReconciliationViewProps {
   reports: DailyReport[];
   reconciliations: SummaryReconciliation[];
   onInspectReport: (report: DailyReport) => void;
+  supportedWorkbooks?: number;
+  unsupportedWorkbooks?: number;
+  page?: number;
+  pageSize?: number;
+  totalChecks?: number;
+  hasMore?: boolean;
+  onPageChange?: (page: number) => void;
 }
 
 export function ReconciliationView({
   reports,
   reconciliations,
   onInspectReport,
+  supportedWorkbooks = 0,
+  unsupportedWorkbooks = 0,
+  page = 1,
+  pageSize = 100,
+  totalChecks = reconciliations.length,
+  hasMore = false,
+  onPageChange,
 }: ReconciliationViewProps) {
   const totalSales = sumNullable(reports.map((r) => r.totalFuelSalesGmd));
   const totalCredit = sumNullable(reports.map((r) => r.creditSalesGmd));
@@ -97,7 +111,10 @@ export function ReconciliationView({
               Daily-Derived vs Workbook SUMMARY Sheet Reconciliation
             </h2>
             <p className="text-xs text-slate-500">
-              Verifies that daily worksheet extractions agree with workbook SUMMARY sheets within tolerance
+              Compares mapped daily-sheet values with cached values in the source workbook SUMMARY sheet
+            </p>
+            <p className="mt-1 text-[11px] text-slate-500">
+              {supportedWorkbooks} workbooks supported · {unsupportedWorkbooks} SUMMARY layouts not yet mapped · volume tolerance ±1 L; financial tolerance ±D1
             </p>
           </div>
           <span className="text-xs font-mono text-slate-500">{reconciliations.length} checks</span>
@@ -118,7 +135,7 @@ export function ReconciliationView({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 font-mono tabular-nums">
-              {reconciliations.slice(0, 40).map((rec) => (
+              {reconciliations.map((rec) => (
                 <tr key={rec.reconciliationId} className="hover:bg-slate-50">
                   <td className="py-2 pr-3 font-sans font-medium text-slate-900">{rec.stationName}</td>
                   <td className="py-2 px-3 font-sans text-slate-600">
@@ -142,13 +159,24 @@ export function ReconciliationView({
               ))}
               {reconciliations.length === 0 && (
                 <tr><td colSpan={8} className="py-6 text-center font-sans text-slate-500">
-                  No extracted SUMMARY reconciliation results are stored in the production database.
+                  No comparable daily and SUMMARY values were found for this filter. The workbook may have an unsupported SUMMARY layout or unmapped daily sheets.
                 </td></tr>
               )}
             </tbody>
           </table>
         </div>
       </section>
+
+      <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
+        <span>
+          {totalChecks === 0 ? 'No reconciliation checks' : `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, totalChecks)} of ${totalChecks.toLocaleString()} checks`}
+        </span>
+        <div className="flex items-center gap-2">
+          <button type="button" disabled={page <= 1} onClick={() => onPageChange?.(page - 1)} className="rounded border border-slate-300 px-3 py-1.5 disabled:opacity-40">Previous</button>
+          <span>Page {page}</span>
+          <button type="button" disabled={!hasMore} onClick={() => onPageChange?.(page + 1)} className="rounded border border-slate-300 px-3 py-1.5 disabled:opacity-40">Next</button>
+        </div>
+      </div>
 
       {/* Daily Financial Ledger */}
       <section className="bg-white border border-slate-200 rounded-md p-5">
