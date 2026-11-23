@@ -606,6 +606,8 @@ def production_reconciliations(
     year: int | None = Query(default=None, ge=2000, le=2100),
     month: int | None = Query(default=None, ge=1, le=12),
     station: str | None = Query(default=None, min_length=1, max_length=160),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -661,6 +663,9 @@ def production_reconciliations(
         .order_by(SourceWorkbook.id)
     ).all()
     checks = []
+    check_index = 0
+    page_start = (page - 1) * page_size
+    page_end = page_start + page_size
     supported_workbooks = set()
     for snapshot, source in snapshots:
         raw = snapshot.raw_cells or {}
@@ -721,30 +726,35 @@ def production_reconciliations(
                     result = "matched" if abs(variance) < 0.0001 else "within_tolerance"
                 else:
                     result = "variance_exceeded"
-                checks.append({
-                    "ownerUid": "production",
-                    "reconciliationId": f"{source.id}-{report_date}-{column}",
-                    "workbookId": str(source.id),
-                    "stationId": _canonical_station(station_name),
-                    "stationName": _canonical_station(station_name),
-                    "year": parsed_date.year,
-                    "month": parsed_date.month,
-                    "reportDate": report_date,
-                    "fieldName": field_name,
-                    "product": product,
-                    "dailyDerivedValue": daily_value,
-                    "summaryValue": summary_value,
-                    "variance": variance,
-                    "tolerance": tolerance,
-                    "result": result,
-                    "sourceWorkbook": source.file_name,
-                })
+                if page_start <= check_index < page_end:
+                    checks.append({
+                        "ownerUid": "production",
+                        "reconciliationId": f"{source.id}-{report_date}-{column}",
+                        "workbookId": str(source.id),
+                        "stationId": _canonical_station(station_name),
+                        "stationName": _canonical_station(station_name),
+                        "year": parsed_date.year,
+                        "month": parsed_date.month,
+                        "reportDate": report_date,
+                        "fieldName": field_name,
+                        "product": product,
+                        "dailyDerivedValue": daily_value,
+                        "summaryValue": summary_value,
+                        "variance": variance,
+                        "tolerance": tolerance,
+                        "result": result,
+                        "sourceWorkbook": source.file_name,
+                    })
+                check_index += 1
     return {
         "checks": checks,
         "supported_workbooks": len(supported_workbooks),
         "total_workbooks_with_summary": len(snapshots),
         "unsupported_workbooks": max(0, len(snapshots) - len(supported_workbooks)),
-        "check_count": len(checks),
+        "check_count": check_index,
+        "page": page,
+        "page_size": page_size,
+        "has_more": check_index > page_end,
     }
 
 
