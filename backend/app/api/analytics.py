@@ -622,7 +622,7 @@ def production_reconciliations(
         "pms": ("PMS Total", "PMS", "shift_sales_litres.pms_total", 1.0),
         "ago": ("AGO Total", "AGO", "shift_sales_litres.ago_total", 1.0),
         "fuel sales": ("Fuel Sales", "GROUP", "sales_revenue.total_gmd", 1.0),
-        "total credit sales": ("Total Credit Sales", "GROUP", "credit_sales.amount", 1.0),
+        "total credit sales": ("Total Credit Sales", "GROUP", "cash_reconciliation.credit_sales", 1.0),
         "r/tank (pms)": ("Return to Tank", "PMS", "meter_totals.return_to_tank.pms", 1.0),
         "r/tank (ago)": ("Return to Tank", "AGO", "meter_totals.return_to_tank.ago", 1.0),
         "cash-fuel": ("Cash Fuel", "GROUP", "cash_reconciliation.cash", 1.0),
