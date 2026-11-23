@@ -290,6 +290,10 @@ export default function App() {
   }, [isAuthenticated, activeRoute]);
 
   useEffect(() => {
+    setReconciliationPage(1);
+  }, [filters.year, filters.month, filters.stationId]);
+
+  useEffect(() => {
     if (!isAuthenticated || activeRoute !== 'reconciliation') {
       if (!isAuthenticated) {
         setProductionReconciliations(null);
