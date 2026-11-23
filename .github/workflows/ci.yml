@@ -33,3 +33,9 @@ jobs:
       - name: Validate Alembic migration graph
         working-directory: backend
         run: alembic heads
+      - name: Apply migrations to an isolated SQLite database
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Import FastAPI application
+        working-directory: backend
+        run: python -c "from app.main import app; print(app.title)"
