@@ -142,7 +142,8 @@ def overview(
         pms = _number(shifts_data.get("pms_total"))
         ago = _number(shifts_data.get("ago_total"))
         revenue = _number((data.get("sales_revenue") or {}).get("total_gmd"))
-        if any(value is not None and value < 0 for value in (pms, ago, revenue)):
+        coupon_sales = _number((data.get("cash_reconciliation") or {}).get("coupons"))
+        if any(value is not None and value < 0 for value in (pms, ago, revenue, coupon_sales)):
             counts["anomalies"] += 1
             continue
 
@@ -151,7 +152,7 @@ def overview(
             "revenue_gmd": revenue,
             "pms_litres": pms,
             "ago_litres": ago,
-            "coupon_sales_gmd": (data.get("cash_reconciliation") or {}).get("coupons"),
+            "coupon_sales_gmd": coupon_sales,
             "cash_reconciliation_difference_gmd": (data.get("cash_reconciliation") or {}).get("difference"),
             "pms_stock_difference_litres": ((data.get("stock_control") or {}).get("pms") or {}).get("difference"),
             "ago_stock_difference_litres": ((data.get("stock_control") or {}).get("ago") or {}).get("difference"),
@@ -166,7 +167,6 @@ def overview(
         key = name.casefold()
         item = station_totals.setdefault(key, {"station_name": name, "report_count": 0, "pms": [0.0, 0], "ago": [0.0, 0], "revenue": [0.0, 0], "coupons": [0.0, 0]})
         item["report_count"] += 1
-        coupon_sales = _number((data.get("cash_reconciliation") or {}).get("coupons"))
         for key, value in (("pms", pms), ("ago", ago), ("revenue", revenue), ("coupons", coupon_sales)):
             if value is not None:
                 item[key][0] += value
