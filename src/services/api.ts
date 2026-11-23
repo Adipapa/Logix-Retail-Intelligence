@@ -84,6 +84,7 @@ export interface LiveAnalyticsOverview {
     pms: { morning: number; afternoon: number; night: number };
     ago: { morning: number; afternoon: number; night: number };
   };
+  missing_shift_entries: { morning: number; afternoon: number; night: number };
   stations: Array<{
     station_name: string;
     report_count: number;
