@@ -87,6 +87,7 @@ export default function App() {
   const [productionMetadata, setProductionMetadata] = useState<ProductionMetadataResponse | null>(null);
   const [productionData, setProductionData] = useState<ProductionReportsResponse | null>(null);
   const [productionDataError, setProductionDataError] = useState<string | null>(null);
+  const [loadingProductionData, setLoadingProductionData] = useState(false);
   const [productionMonitor, setProductionMonitor] = useState<ProductionMonitorResponse | null>(null);
 
   const [workspace, setWorkspace] = useState<WorkspaceData>(() => emptyWorkspace());
@@ -208,6 +209,7 @@ export default function App() {
       setProductionMetadata(null);
       setProductionData(null);
       setProductionDataError(null);
+      setLoadingProductionData(false);
       setProductionMonitor(null);
       return;
     }
@@ -245,6 +247,8 @@ export default function App() {
     let active = true;
     const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
     const requestFilters = { year: filters.year, month: filters.month, station: stationName };
+    setLoadingProductionData(true);
+    setProductionDataError(null);
     apiProductionReports(requestFilters)
       .then((production) => {
         if (active) {
@@ -254,6 +258,9 @@ export default function App() {
       })
       .catch((err) => {
         if (active) setProductionDataError(err instanceof Error ? err.message : 'Unable to load production reports.');
+      })
+      .finally(() => {
+        if (active) setLoadingProductionData(false);
       });
     return () => { active = false; };
   }, [isAuthenticated, activeRoute, filters.year, filters.month, filters.stationId]);
@@ -520,6 +527,12 @@ export default function App() {
         {productionDataError && activeRoute !== 'dashboard' && (
           <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900">
             Production report data could not be loaded: {productionDataError}
+          </div>
+        )}
+
+        {loadingProductionData && reportRoutes.includes(activeRoute) && (
+          <div className="mb-4 p-3 bg-white border border-slate-200 rounded-md text-xs text-slate-600">
+            Loading detailed production reports…
           </div>
         )}
 
