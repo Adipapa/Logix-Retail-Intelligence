@@ -58,7 +58,7 @@ def _number(ws, coord):
     try: return float(str(value).replace(",","").replace("GMD","").strip())
     except (ValueError,TypeError): return None
 
-def extract_sukuta_day(cached_ws, cached_ws):
+def extract_sukuta_day(ws, wsv):
     # Sukuta's verified Jan-2025 template: meter shifts D/E, F/G, H/I;
     # stock control O:Q; cash reconciliation O:P; deliveries rows 22:25 and 30:33.
     pumps=[]
