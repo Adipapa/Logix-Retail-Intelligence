@@ -40,6 +40,7 @@ function TankVisual({ label, litres, capacity, tone, source }: {
 export function StockControlView({ reports, stations, fuelFilter, onInspectReport }: StockControlViewProps) {
   const showPms = fuelFilter === 'ALL' || fuelFilter === 'PMS';
   const showAgo = fuelFilter === 'ALL' || fuelFilter === 'AGO';
+  const stationById = new Map(stations.map((station) => [station.stationId, station]));
 
   const pmsReceipts = sumNullable(reports.map((r) => r.pmsReceipts));
   const pmsNetDiff = sumNullable(reports.map((r) => r.pmsStockDiff));
@@ -118,8 +119,8 @@ export function StockControlView({ reports, stations, fuelFilter, onInspectRepor
                       <h3 className="text-sm font-semibold text-slate-900">{report.stationName}</h3>
                       <span className="text-[11px] text-slate-500">{report.reportDate}</span>
                     </div>
-                    {showPms && <TankVisual label="PMS" litres={report.pmsClosingStock ?? report.pmsTheoreticalStock} capacity={stations.find((station) => station.stationId === report.stationId)?.tankCapacityPms ?? 0} tone="pms" source={report.pmsClosingStock !== null ? "Dip closing stock" : report.pmsTheoreticalStock !== null ? "Theoretical stock" : "No reading"} />}
-                    {showAgo && <TankVisual label="AGO" litres={report.agoClosingStock ?? report.agoTheoreticalStock} capacity={stations.find((station) => station.stationId === report.stationId)?.tankCapacityAgo ?? 0} tone="ago" source={report.agoClosingStock !== null ? "Dip closing stock" : report.agoTheoreticalStock !== null ? "Theoretical stock" : "No reading"} />}
+                    {showPms && <TankVisual label="PMS" litres={report.pmsClosingStock ?? report.pmsTheoreticalStock} capacity={stationById.get(report.stationId)?.tankCapacityPms ?? 0} tone="pms" source={report.pmsClosingStock !== null ? "Dip closing stock" : report.pmsTheoreticalStock !== null ? "Theoretical stock" : "No reading"} />}
+                    {showAgo && <TankVisual label="AGO" litres={report.agoClosingStock ?? report.agoTheoreticalStock} capacity={stationById.get(report.stationId)?.tankCapacityAgo ?? 0} tone="ago" source={report.agoClosingStock !== null ? "Dip closing stock" : report.agoTheoreticalStock !== null ? "Theoretical stock" : "No reading"} />}
                   </div>
                 ))}
               </div>
