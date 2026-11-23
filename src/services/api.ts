@@ -142,6 +142,33 @@ export async function apiAnalyticsOverview(filters: {
 }
 
 
+export interface ProductionReconciliationResponse {
+  checks: import("../types/logix").SummaryReconciliation[];
+  supported_workbooks: number;
+  total_workbooks_with_summary: number;
+  unsupported_workbooks: number;
+  check_count: number;
+}
+
+export async function apiProductionReconciliations(filters: {
+  year?: string;
+  month?: string;
+  station?: string;
+} = {}): Promise<ProductionReconciliationResponse> {
+  const token = localStorage.getItem("logix_api_token");
+  if (!token) throw new Error("Sign in to load reconciliation results.");
+  const params = new URLSearchParams();
+  if (filters.year && filters.year !== "ALL") params.set("year", filters.year);
+  if (filters.month && filters.month !== "ALL") params.set("month", filters.month);
+  if (filters.station && filters.station !== "ALL") params.set("station", filters.station);
+  const query = params.toString();
+  const response = await fetch(`${API_BASE}/api/v1/analytics/reconciliations${query ? `?${query}` : ""}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Unable to load SUMMARY reconciliations.");
+  return response.json();
+}
+
 export interface ProductionMetadataResponse {
   years: number[];
   stations: Array<{
