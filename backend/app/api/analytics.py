@@ -16,7 +16,7 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 class StationTankCapacityInput(BaseModel):
     station_name: str = Field(min_length=1, max_length=160)
-    pms_tank_capacity_litres: float | None = Field(default=None, gt=0)
+    pms_tank_capacity_litres: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     ago_tank_capacity_litres: float | None = Field(default=None, gt=0)
 
 SHIFT_INPUT_COLUMNS = {
@@ -546,6 +546,8 @@ def update_station_tank_capacities(
     _: User = Depends(require_admin),
 ):
     station_name = payload.station_name.strip()
+    if not station_name:
+        raise HTTPException(status_code=422, detail="Station name cannot be blank.")
     if payload.pms_tank_capacity_litres is None and payload.ago_tank_capacity_litres is None:
         raise HTTPException(status_code=422, detail="Enter at least one tank capacity.")
     station_key = station_name.casefold()
