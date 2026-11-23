@@ -127,7 +127,13 @@ export async function apiAnalyticsOverview(filters: {
 
 export interface ProductionMetadataResponse {
   years: number[];
-  stations: Array<{ stationId: string; canonicalName: string; territory: string }>;
+  stations: Array<{
+    stationId: string;
+    canonicalName: string;
+    territory: string;
+    tankCapacityPms: number | null;
+    tankCapacityAgo: number | null;
+  }>;
 }
 
 export async function apiProductionMetadata(): Promise<ProductionMetadataResponse> {
@@ -138,6 +144,28 @@ export async function apiProductionMetadata(): Promise<ProductionMetadataRespons
   });
   if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Unable to load production metadata.");
   return response.json();
+}
+
+export async function apiUpdateStationTankCapacities(
+  stationName: string,
+  pmsCapacityLitres: number | null,
+  agoCapacityLitres: number | null,
+): Promise<void> {
+  const token = localStorage.getItem("logix_api_token");
+  if (!token) throw new Error("Sign in to update station capacities.");
+  const response = await fetch(`${API_BASE}/api/v1/analytics/station-capacities`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      station_name: stationName,
+      pms_tank_capacity_litres: pmsCapacityLitres,
+      ago_tank_capacity_litres: agoCapacityLitres,
+    }),
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Unable to update tank capacities.");
 }
 
 export interface ProductionReportsResponse {
