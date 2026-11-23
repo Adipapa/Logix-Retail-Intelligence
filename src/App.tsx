@@ -565,6 +565,7 @@ export default function App() {
         {activeRoute === 'stock-control' && (
           <StockControlView
             reports={filteredReports}
+            stations={productionStations}
             fuelFilter={filters.fuelType}
             onInspectReport={setInspectedReport}
           />
