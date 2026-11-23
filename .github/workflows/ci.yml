@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, postgres-migration]
   push:
-    branches: [postgres-migration]
+    branches: [postgres-migration, complete-analytics-upgrade]
 
 jobs:
   frontend:
