@@ -135,7 +135,7 @@ export function ReconciliationView({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 font-mono tabular-nums">
-              {reconciliations.slice(0, 40).map((rec) => (
+              {reconciliations.map((rec) => (
                 <tr key={rec.reconciliationId} className="hover:bg-slate-50">
                   <td className="py-2 pr-3 font-sans font-medium text-slate-900">{rec.stationName}</td>
                   <td className="py-2 px-3 font-sans text-slate-600">
