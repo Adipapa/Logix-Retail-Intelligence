@@ -59,7 +59,18 @@ export async function apiDropboxSync(): Promise<{
 export interface LiveAnalyticsOverview {
   data_status: "mapped_extraction_available" | "no_mapped_extractions";
   period: { year: number | null; month: number | null; station: string | null };
-  records: { total: number; mapped: number; complete: number; pending: number; included_in_kpis: number; excluded_anomalies: number; raw_or_unmapped: number };
+  records: {
+    total: number;
+    mapped: number;
+    complete: number;
+    pending: number;
+    included_in_kpis: number;
+    excluded_anomalies: number;
+    raw_or_unmapped: number;
+    coupon_sales_reports: number;
+    revenue_reports: number;
+    price_calculation_reports: number;
+  };
   kpis: {
     revenue_gmd: number | null;
     pms_litres: number | null;
