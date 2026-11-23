@@ -327,6 +327,7 @@ export default function App() {
     }
     try {
       const result = await apiDropboxSync();
+      setLoadedReportFilterKey(null);
       setAuthNotice(`Dropbox sync completed: ${result.files_seen} files checked; ${result.new_or_changed} new or revised; ${result.tracked_workbooks} tracked. Extraction attempted: ${result.imports_attempted ?? 0}; succeeded: ${result.imports_succeeded ?? 0}; failed: ${result.imports_failed ?? 0}.`);
       const requestFilters = { year: filters.year, month: filters.month, station: filters.stationId === 'ALL' ? undefined : filters.stationId };
       setProductionMetadata(await apiProductionMetadata());
@@ -345,6 +346,7 @@ export default function App() {
   const handleReprocessLegacy2022 = async () => {
     try {
       const result = await apiReprocessLegacy2022();
+      setLoadedReportFilterKey(null);
       const summary = `2022 Kotu reprocessing: ${result.workbooks_succeeded}/${result.workbooks_attempted} workbooks succeeded; ${result.workbooks_failed} failed.`;
       setAuthNotice(summary);
       const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
