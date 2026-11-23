@@ -1,3 +1,4 @@
+import { useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowUpRight, FolderOpen } from 'lucide-react';
 import { FuelComparisonChart } from '../components/Charts';
 import { StatusLabel } from '../components/StatusLabel';
@@ -11,6 +12,68 @@ interface StationsViewProps {
   selectedStationId: string | null;
   onSelectStation: (stationId: string | null) => void;
   onInspectReport: (report: DailyReport) => void;
+  canManageStations: boolean;
+  onSaveTankCapacities: (stationName: string, pmsCapacityLitres: number | null, agoCapacityLitres: number | null) => Promise<void>;
+}
+
+function TankCapacityEditor({
+  station,
+  onSave,
+}: {
+  station: Station;
+  onSave: (stationName: string, pmsCapacityLitres: number | null, agoCapacityLitres: number | null) => Promise<void>;
+}) {
+  const [pms, setPms] = useState(station.tankCapacityPms > 0 ? String(station.tankCapacityPms) : "");
+  const [ago, setAgo] = useState(station.tankCapacityAgo > 0 ? String(station.tankCapacityAgo) : "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const pmsValue = pms.trim() ? Number(pms) : null;
+    const agoValue = ago.trim() ? Number(ago) : null;
+    if ((pmsValue !== null && (!Number.isFinite(pmsValue) || pmsValue <= 0)) ||
+        (agoValue !== null && (!Number.isFinite(agoValue) || agoValue <= 0))) {
+      setError("Enter positive capacity values in litres, or leave a field blank.");
+      return;
+    }
+    if (pmsValue === null && agoValue === null) {
+      setError("Enter at least one tank capacity.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(station.canonicalName, pmsValue, agoValue);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save tank capacities.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-900">Configure tank capacities</h3>
+        <p className="mt-1 text-xs text-slate-500">Enter the actual installed tank capacities. These values determine tank-level percentages; they are not estimated from sales data.</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label className="text-xs text-slate-600">
+          PMS capacity (litres)
+          <input type="number" min="1" step="any" value={pms} onChange={(event) => setPms(event.target.value)} placeholder="e.g. 30000" className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+        </label>
+        <label className="text-xs text-slate-600">
+          AGO capacity (litres)
+          <input type="number" min="1" step="any" value={ago} onChange={(event) => setAgo(event.target.value)} placeholder="e.g. 25000" className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+        </label>
+      </div>
+      {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+      <button type="submit" disabled={saving} className="rounded-md bg-blue-700 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">
+        {saving ? "Saving…" : "Save tank capacities"}
+      </button>
+    </form>
+  );
 }
 
 export function StationsView({
@@ -20,6 +83,8 @@ export function StationsView({
   selectedStationId,
   onSelectStation,
   onInspectReport,
+  canManageStations,
+  onSaveTankCapacities,
 }: StationsViewProps) {
   if (selectedStationId) {
     const station = stations.find((s) => s.stationId === selectedStationId);
@@ -76,10 +141,17 @@ export function StationsView({
             </div>
           </div>
           <div className="text-xs text-slate-600 font-mono tabular-nums">
-            {station.pumpCount} pumps · PMS Tank {formatLitres(station.tankCapacityPms)} · AGO Tank{' '}
-            {formatLitres(station.tankCapacityAgo)}
+            {station.pumpCount} pumps · PMS Tank {station.tankCapacityPms > 0 ? formatLitres(station.tankCapacityPms) : "Not configured"} · AGO Tank {station.tankCapacityAgo > 0 ? formatLitres(station.tankCapacityAgo) : "Not configured"}
           </div>
         </div>
+
+        {canManageStations && (
+          <TankCapacityEditor
+            key={station.stationId}
+            station={station}
+            onSave={onSaveTankCapacities}
+          />
+        )}
 
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white border border-slate-200 rounded-md p-4">

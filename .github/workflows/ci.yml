@@ -2,23 +2,27 @@ name: Logix Retail CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, postgres-migration]
   push:
-    branches: [postgres-migration]
+    branches: [postgres-migration, complete-analytics-upgrade]
 
 jobs:
   frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-      - run: npm install
-      - run: npm run build
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run build
 
   backend:
     runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: ci-only-secret-key-not-used
+      DATABASE_URL: sqlite:///./ci-test.db
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,3 +30,40 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -r backend/requirements.txt
       - run: python -m compileall -q backend/app backend/migrations
+      - name: Validate Alembic migration graph
+        working-directory: backend
+        run: alembic heads
+      - name: Apply migrations to an isolated SQLite database
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Import FastAPI application
+        working-directory: backend
+        run: python -c "from app.main import app; print(app.title)"
+      - name: Verify migration bootstraps an existing unversioned database
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import sqlite3
+          connection = sqlite3.connect("ci-test.db")
+          connection.execute(
+              "INSERT INTO stations (station_key, name, folder_path, active) VALUES ('test-station', 'Test Station', '/test', 1)"
+          )
+          connection.execute("ALTER TABLE stations DROP COLUMN pms_tank_capacity_litres")
+          connection.execute("ALTER TABLE stations DROP COLUMN ago_tank_capacity_litres")
+          connection.execute("DROP TABLE alembic_version")
+          connection.commit()
+          connection.close()
+          PY
+          alembic upgrade head
+          python - <<'PY'
+          import sqlite3
+          connection = sqlite3.connect("ci-test.db")
+          columns = {row[1] for row in connection.execute("PRAGMA table_info(stations)")}
+          assert "pms_tank_capacity_litres" in columns
+          assert "ago_tank_capacity_litres" in columns
+          row = connection.execute("SELECT name, folder_path FROM stations WHERE station_key = 'test-station'").fetchone()
+          assert row == ("Test Station", "/test"), row
+          revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()
+          assert revision == ("0002_station_tank_capacities",), revision
+          connection.close()
+          PY

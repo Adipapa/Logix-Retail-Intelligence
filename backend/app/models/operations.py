@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Date, DateTime, Integer, String, Text, UniqueConstraint, JSON
+from sqlalchemy import Date, DateTime, Float, Integer, String, Text, UniqueConstraint, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database.session import Base
 
@@ -10,6 +10,8 @@ class Station(Base):
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     folder_path: Mapped[str] = mapped_column(Text, nullable=False)
     active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    pms_tank_capacity_litres: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ago_tank_capacity_litres: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 class SourceWorkbook(Base):
     __tablename__ = "source_workbooks"

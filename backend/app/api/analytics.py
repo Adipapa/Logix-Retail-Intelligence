@@ -1,16 +1,23 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_admin
 from app.database.session import get_db
 from app.models.operations import DailyReport, ImportJob, ImportWarning, SourceWorkbook, Station as StationModel, SummarySnapshot
 from app.models.integration import DropboxFile, DropboxSyncState
 from app.models.user import User
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+
+class StationTankCapacityInput(BaseModel):
+    station_name: str = Field(min_length=1, max_length=160)
+    pms_tank_capacity_litres: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    ago_tank_capacity_litres: float | None = Field(default=None, gt=0, allow_inf_nan=False)
 
 SHIFT_INPUT_COLUMNS = {
     "morning": ("D", "E"),
@@ -92,6 +99,7 @@ def overview(
     # 512 MiB memory limit on the production dataset.
     stream_query = (
         select(
+            DailyReport.report_date,
             DailyReport.station_name,
             DailyReport.raw_cells,
             DailyReport.extracted_data,
@@ -109,41 +117,65 @@ def overview(
         stream_query = stream_query.where(DailyReport.station_name.ilike(station))
 
     counts = {"mapped": 0, "complete": 0, "pending": 0, "included": 0, "anomalies": 0}
+    missing_shift_entries = {"morning": 0, "afternoon": 0, "night": 0}
     sums = {
         "revenue_gmd": [0.0, 0], "pms_litres": [0.0, 0], "ago_litres": [0.0, 0],
+        "pms_revenue_gmd": [0.0, 0], "ago_revenue_gmd": [0.0, 0],
+        "coupon_sales_gmd": [0.0, 0],
         "cash_reconciliation_difference_gmd": [0.0, 0],
         "pms_stock_difference_litres": [0.0, 0],
         "ago_stock_difference_litres": [0.0, 0],
     }
     station_totals = {}
+    monthly_totals = {}
+    price_totals = {"revenue_gmd": 0.0, "volume_litres": 0.0, "paired_reports": 0}
+    shift_totals = {
+        "pms": {"morning": 0.0, "afternoon": 0.0, "night": 0.0},
+        "ago": {"morning": 0.0, "afternoon": 0.0, "night": 0.0},
+    }
 
     result = db.execute(
         stream_query.execution_options(stream_results=True, yield_per=100)
     )
-    for station_name, raw_cells, extracted_data in result:
+    for report_date, station_name, raw_cells, extracted_data in result:
         data = extracted_data or {}
         shifts_data = data.get("shift_sales_litres") or {}
         if not (data.get("template") and shifts_data):
             continue
 
         counts["mapped"] += 1
-        if not all(_shift_entry_status(raw_cells).values()):
+        shift_status = _shift_entry_status(raw_cells)
+        for shift_name, entered in shift_status.items():
+            if not entered:
+                missing_shift_entries[shift_name] += 1
+        if not all(shift_status.values()):
             counts["pending"] += 1
             continue
 
         counts["complete"] += 1
         pms = _number(shifts_data.get("pms_total"))
         ago = _number(shifts_data.get("ago_total"))
-        revenue = _number((data.get("sales_revenue") or {}).get("total_gmd"))
-        if any(value is not None and value < 0 for value in (pms, ago, revenue)):
+        revenue_data = data.get("sales_revenue") or {}
+        revenue = _number(revenue_data.get("total_gmd"))
+        pms_revenue = _number(revenue_data.get("pms_gmd"))
+        ago_revenue = _number(revenue_data.get("ago_gmd"))
+        coupon_sales = _number((data.get("cash_reconciliation") or {}).get("coupons"))
+        if any(value is not None and value < 0 for value in (pms, ago, revenue, pms_revenue, ago_revenue, coupon_sales)):
             counts["anomalies"] += 1
             continue
 
         counts["included"] += 1
+        if revenue is not None and pms is not None and ago is not None:
+            price_totals["revenue_gmd"] += revenue
+            price_totals["volume_litres"] += pms + ago
+            price_totals["paired_reports"] += 1
         values = {
             "revenue_gmd": revenue,
             "pms_litres": pms,
             "ago_litres": ago,
+            "pms_revenue_gmd": pms_revenue,
+            "ago_revenue_gmd": ago_revenue,
+            "coupon_sales_gmd": coupon_sales,
             "cash_reconciliation_difference_gmd": (data.get("cash_reconciliation") or {}).get("difference"),
             "pms_stock_difference_litres": ((data.get("stock_control") or {}).get("pms") or {}).get("difference"),
             "ago_stock_difference_litres": ((data.get("stock_control") or {}).get("ago") or {}).get("difference"),
@@ -156,12 +188,39 @@ def overview(
 
         name = _canonical_station(station_name)
         key = name.casefold()
-        item = station_totals.setdefault(key, {"station_name": name, "report_count": 0, "pms": [0.0, 0], "ago": [0.0, 0], "revenue": [0.0, 0]})
+        item = station_totals.setdefault(key, {"station_name": name, "report_count": 0, "pms": [0.0, 0], "ago": [0.0, 0], "revenue": [0.0, 0], "pms_revenue": [0.0, 0], "ago_revenue": [0.0, 0], "coupons": [0.0, 0]})
         item["report_count"] += 1
-        for key, value in (("pms", pms), ("ago", ago), ("revenue", revenue)):
+        for key, value in (("pms", pms), ("ago", ago), ("revenue", revenue), ("pms_revenue", pms_revenue), ("ago_revenue", ago_revenue), ("coupons", coupon_sales)):
             if value is not None:
                 item[key][0] += value
                 item[key][1] += 1
+
+        month_key = report_date.strftime("%Y-%m")
+        month_item = monthly_totals.setdefault(month_key, {
+            "month": month_key, "pms_litres": 0.0, "ago_litres": 0.0,
+            "revenue_gmd": 0.0, "pms_revenue_gmd": 0.0, "ago_revenue_gmd": 0.0,
+            "coupon_sales_gmd": 0.0, "completed_reports": 0,
+        })
+        month_item["completed_reports"] += 1
+        if pms is not None:
+            month_item["pms_litres"] += pms
+        if ago is not None:
+            month_item["ago_litres"] += ago
+        if revenue is not None:
+            month_item["revenue_gmd"] += revenue
+        if pms_revenue is not None:
+            month_item["pms_revenue_gmd"] += pms_revenue
+        if ago_revenue is not None:
+            month_item["ago_revenue_gmd"] += ago_revenue
+        if coupon_sales is not None:
+            month_item["coupon_sales_gmd"] += coupon_sales
+
+        for product_key in ("pms", "ago"):
+            product_shifts = shifts_data.get(product_key) or {}
+            for shift_key in ("morning", "afternoon", "night"):
+                shift_value = _number(product_shifts.get(shift_key))
+                if shift_value is not None:
+                    shift_totals[product_key][shift_key] += shift_value
 
     stations = [
         {
@@ -170,6 +229,9 @@ def overview(
             "pms_litres": _nullable(*item["pms"]),
             "ago_litres": _nullable(*item["ago"]),
             "revenue_gmd": _nullable(*item["revenue"]),
+            "coupon_sales_gmd": _nullable(*item["coupons"]),
+            "pms_revenue_gmd": _nullable(*item["pms_revenue"]),
+            "ago_revenue_gmd": _nullable(*item["ago_revenue"]),
         }
         for name, item in station_totals.items()
     ]
@@ -233,8 +295,35 @@ def overview(
             "included_in_kpis": counts["included"],
             "excluded_anomalies": counts["anomalies"],
             "raw_or_unmapped": total - counts["mapped"],
+            "coupon_sales_reports": sums["coupon_sales_gmd"][1],
+            "revenue_reports": sums["revenue_gmd"][1],
+            "price_calculation_reports": price_totals["paired_reports"],
         },
-        "kpis": {key: _nullable(*value) for key, value in sums.items()},
+        "kpis": {
+            **{key: _nullable(*value) for key, value in sums.items()},
+            "average_revenue_per_completed_report_gmd": round(sums["revenue_gmd"][0] / sums["revenue_gmd"][1], 2) if sums["revenue_gmd"][1] else None,
+            "average_selling_price_gmd_per_litre": round(
+                price_totals["revenue_gmd"] / price_totals["volume_litres"], 4
+            ) if price_totals["paired_reports"] and price_totals["volume_litres"] > 0 else None,
+        },
+        "monthly_trends": [
+            {
+                **item,
+                "pms_litres": round(item["pms_litres"], 2),
+                "ago_litres": round(item["ago_litres"], 2),
+                "revenue_gmd": round(item["revenue_gmd"], 2),
+                "pms_revenue_gmd": round(item["pms_revenue_gmd"], 2),
+                "ago_revenue_gmd": round(item["ago_revenue_gmd"], 2),
+                "coupon_sales_gmd": round(item["coupon_sales_gmd"], 2),
+                "total_volume_litres": round(item["pms_litres"] + item["ago_litres"], 2),
+            }
+            for _, item in sorted(monthly_totals.items())
+        ],
+        "shift_totals": {
+            product: {shift: round(value, 2) for shift, value in shifts.items()}
+            for product, shifts in shift_totals.items()
+        },
+        "missing_shift_entries": missing_shift_entries,
         "stations": stations,
         "validation_warning_count": warning_count,
         "recent_reports": recent_reports,
@@ -420,11 +509,95 @@ def _production_report_row(report_id, report_date, station_name, worksheet_name,
     }
 
 
+@router.get("/metadata")
+def production_metadata(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Return filter options without loading report JSON payloads."""
+    available_years = [
+        int(value) for value in db.scalars(
+            select(func.extract("year", DailyReport.report_date)).distinct().order_by(
+                func.extract("year", DailyReport.report_date)
+            )
+        ).all() if value is not None
+    ]
+    station_rows = db.scalars(
+        select(StationModel).where(StationModel.active.is_(True))
+    ).all()
+    names = {row.name for row in station_rows}
+    names.update(db.scalars(select(DailyReport.station_name).distinct()).all())
+    capacity_by_name = {
+        row.name.strip().casefold(): row for row in station_rows
+    }
+    stations = {}
+    for value in names:
+        display = _canonical_station(value)
+        configured = capacity_by_name.get((value or "").strip().casefold())
+        item = stations.setdefault(display.casefold(), {
+            "stationId": display,
+            "canonicalName": display,
+            "territory": "",
+            "tankCapacityPms": None,
+            "tankCapacityAgo": None,
+        })
+        if configured:
+            if configured.pms_tank_capacity_litres is not None:
+                item["tankCapacityPms"] = configured.pms_tank_capacity_litres
+            if configured.ago_tank_capacity_litres is not None:
+                item["tankCapacityAgo"] = configured.ago_tank_capacity_litres
+    return {
+        "years": available_years,
+        "stations": sorted(stations.values(), key=lambda item: item["canonicalName"].casefold()),
+    }
+
+
+@router.put("/station-capacities")
+def update_station_tank_capacities(
+    payload: StationTankCapacityInput,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    station_name = payload.station_name.strip()
+    if not station_name:
+        raise HTTPException(status_code=422, detail="Station name cannot be blank.")
+    if payload.pms_tank_capacity_litres is None and payload.ago_tank_capacity_litres is None:
+        raise HTTPException(status_code=422, detail="Enter at least one tank capacity.")
+    station_key = station_name.casefold()
+    station = db.scalar(
+        select(StationModel).where(
+            or_(
+                func.lower(func.trim(StationModel.name)) == station_key,
+                StationModel.station_key == station_key[:100],
+            )
+        )
+    )
+    if station is None:
+        station = StationModel(
+            station_key=station_key[:100],
+            name=_canonical_station(station_name),
+            folder_path="",
+            active=True,
+        )
+        db.add(station)
+    station.pms_tank_capacity_litres = payload.pms_tank_capacity_litres
+    station.ago_tank_capacity_litres = payload.ago_tank_capacity_litres
+    db.commit()
+    db.refresh(station)
+    return {
+        "station_name": station.name,
+        "pms_tank_capacity_litres": station.pms_tank_capacity_litres,
+        "ago_tank_capacity_litres": station.ago_tank_capacity_litres,
+    }
+
+
 @router.get("/reports")
 def production_reports(
     year: int | None = Query(default=None, ge=2000, le=2100),
     month: int | None = Query(default=None, ge=1, le=12),
     station: str | None = Query(default=None, min_length=1, max_length=160),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=250, ge=1, le=500),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -453,11 +626,17 @@ def production_reports(
     if station:
         statement = statement.where(func.lower(func.trim(DailyReport.station_name)) == station.strip().lower())
 
+    # Bound each request's database and JSON payload. The frontend can request
+    # subsequent pages without forcing the API process to retain the full history.
+    page_rows = db.execute(
+        statement.offset((page - 1) * page_size).limit(page_size + 1)
+    ).all()
+    has_more = len(page_rows) > page_size
+    page_rows = page_rows[:page_size]
+
     reports = []
-    years = set()
     stations = {}
-    result = db.execute(statement.execution_options(stream_results=True, yield_per=100))
-    for row in result:
+    for row in page_rows:
         (report_id, report_date, station_name, worksheet_name, completeness,
          source_reference, imported_at, raw_cells, extracted_data) = row
         data = extracted_data or {}
@@ -470,7 +649,6 @@ def production_reports(
             source_reference, imported_at, raw_cells, data
         )
         reports.append(report)
-        years.add(report_date.year)
         key = (station_name or "Unresolved station").strip().casefold()
         display = _canonical_station(station_name)
         if key not in stations:
@@ -497,6 +675,9 @@ def production_reports(
         "years": available_years,
         "stations": sorted(station_options.values(), key=lambda item: item["canonicalName"].casefold()),
         "record_count": len(reports),
+        "page": page,
+        "page_size": page_size,
+        "has_more": has_more,
     }
 
 

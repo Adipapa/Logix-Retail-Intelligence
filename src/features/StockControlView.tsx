@@ -1,18 +1,21 @@
 import { formatLitres, formatNumber, formatPercent, sumNullable } from '../lib/formatters';
-import type { DailyReport, FuelFilter } from '../types/logix';
+import type { DailyReport, FuelFilter, Station } from '../types/logix';
 
 interface StockControlViewProps {
   reports: DailyReport[];
+  stations: Station[];
   fuelFilter: FuelFilter;
   onInspectReport: (report: DailyReport) => void;
 }
 
 
-function TankVisual({ label, litres, scaleMax, tone, source }: {
-  label: string; litres: number | null; scaleMax: number;
+function TankVisual({ label, litres, capacity, tone, source }: {
+  label: string; litres: number | null; capacity: number;
   tone: 'pms' | 'ago'; source: string;
 }) {
-  const fill = litres === null ? 0 : Math.max(0, Math.min(100, (litres / scaleMax) * 100));
+  const hasCapacity = Number.isFinite(capacity) && capacity > 0;
+  const percent = hasCapacity && litres !== null ? (litres / capacity) * 100 : null;
+  const fill = percent === null ? 0 : Math.max(0, Math.min(100, percent));
   const liquid = tone === 'pms' ? 'bg-sky-500' : 'bg-amber-500';
   const textTone = tone === 'pms' ? 'text-sky-800' : 'text-amber-800';
   return (
@@ -26,15 +29,18 @@ function TankVisual({ label, litres, scaleMax, tone, source }: {
         <div className={`text-xs font-semibold ${textTone}`}>{label}</div>
         <div className="mt-1 text-lg font-semibold font-mono tabular-nums text-slate-900">{litres === null ? '—' : `${Math.round(litres).toLocaleString()} L`}</div>
         <div className="mt-1 text-[11px] text-slate-500">{source}</div>
-        <div className="mt-1 text-[10px] text-slate-400">Relative visual scale</div>
+        <div className="mt-1 text-[10px] text-slate-500">
+          {percent === null ? "Capacity not configured" : `${percent.toFixed(1)}% of ${Math.round(capacity).toLocaleString()} L`}
+        </div>
       </div>
     </div>
   );
 }
 
-export function StockControlView({ reports, fuelFilter, onInspectReport }: StockControlViewProps) {
+export function StockControlView({ reports, stations, fuelFilter, onInspectReport }: StockControlViewProps) {
   const showPms = fuelFilter === 'ALL' || fuelFilter === 'PMS';
   const showAgo = fuelFilter === 'ALL' || fuelFilter === 'AGO';
+  const stationById = new Map(stations.map((station) => [station.stationId, station]));
 
   const pmsReceipts = sumNullable(reports.map((r) => r.pmsReceipts));
   const pmsNetDiff = sumNullable(reports.map((r) => r.pmsStockDiff));
@@ -94,11 +100,6 @@ export function StockControlView({ reports, fuelFilter, onInspectReport }: Stock
           if (!previous || report.reportDate > previous.reportDate) latestByStation.set(key, report);
         }
         const latest = [...latestByStation.values()].sort((a, b) => a.stationName.localeCompare(b.stationName));
-        const tankValues = latest.flatMap((report) => [
-          report.pmsClosingStock ?? report.pmsTheoreticalStock,
-          report.agoClosingStock ?? report.agoTheoreticalStock,
-        ]).filter((value): value is number => value !== null && Number.isFinite(value) && value > 0);
-        const scaleMax = Math.max(...tankValues, 1);
         return (
           <section className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -118,13 +119,13 @@ export function StockControlView({ reports, fuelFilter, onInspectReport }: Stock
                       <h3 className="text-sm font-semibold text-slate-900">{report.stationName}</h3>
                       <span className="text-[11px] text-slate-500">{report.reportDate}</span>
                     </div>
-                    {showPms && <TankVisual label="PMS" litres={report.pmsClosingStock ?? report.pmsTheoreticalStock} scaleMax={scaleMax} tone="pms" source={report.pmsClosingStock !== null ? "Dip closing stock" : report.pmsTheoreticalStock !== null ? "Theoretical stock" : "No reading"} />}
-                    {showAgo && <TankVisual label="AGO" litres={report.agoClosingStock ?? report.agoTheoreticalStock} scaleMax={scaleMax} tone="ago" source={report.agoClosingStock !== null ? "Dip closing stock" : report.agoTheoreticalStock !== null ? "Theoretical stock" : "No reading"} />}
+                    {showPms && <TankVisual label="PMS" litres={report.pmsClosingStock ?? report.pmsTheoreticalStock} capacity={stationById.get(report.stationId)?.tankCapacityPms ?? 0} tone="pms" source={report.pmsClosingStock !== null ? "Dip closing stock" : report.pmsTheoreticalStock !== null ? "Theoretical stock" : "No reading"} />}
+                    {showAgo && <TankVisual label="AGO" litres={report.agoClosingStock ?? report.agoTheoreticalStock} capacity={stationById.get(report.stationId)?.tankCapacityAgo ?? 0} tone="ago" source={report.agoClosingStock !== null ? "Dip closing stock" : report.agoTheoreticalStock !== null ? "Theoretical stock" : "No reading"} />}
                   </div>
                 ))}
               </div>
             )}
-            <p className="text-[11px] text-slate-500">The animation compares available stock levels across the stations currently shown; it is not a tank-capacity percentage. Tank capacities have not yet been configured.</p>
+            <p className="text-[11px] text-slate-500">Fill percentages use each station's configured tank capacity. Where capacity is not configured, the stock volume is shown without a percentage. Readings are dip closing stock when available, otherwise theoretical stock.</p>
           </section>
         );
       })()}

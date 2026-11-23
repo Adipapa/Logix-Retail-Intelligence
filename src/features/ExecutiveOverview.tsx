@@ -1,16 +1,10 @@
 import { AlertTriangle, ArrowUpRight } from 'lucide-react';
+import { FuelComparisonChart, ShiftSplitBars } from '../components/Charts';
 import { formatGmd, formatLitres, formatNumber } from '../lib/formatters';
 import type { LiveAnalyticsOverview } from '../services/api';
-import type { DailyReport, ImportWarning, RouteId, SourceWorkbook, Station, SummaryReconciliation } from '../types/logix';
+import type { RouteId } from '../types/logix';
 
 interface ExecutiveOverviewProps {
-  reports: DailyReport[];
-  stations: Station[];
-  workbooks: SourceWorkbook[];
-  warnings: ImportWarning[];
-  reconciliations: SummaryReconciliation[];
-  onInspectReport: (report: DailyReport) => void;
-  onSelectStation: (stationId: string) => void;
   onNavigate: (route: RouteId) => void;
   liveAnalytics?: LiveAnalyticsOverview | null;
   liveAnalyticsError?: string | null;
@@ -34,7 +28,7 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
         <p className="mt-1 text-xs text-slate-500">Production reporting from the connected PostgreSQL database.</p>
       </div>
       <div className="text-right text-xs text-slate-500">
-        <div>{dataReady ? formatNumber(liveAnalytics.records.total) : '—'} daily reports in database</div>
+        <div>{liveAnalytics ? formatNumber(liveAnalytics.records.total) : '—'} daily reports in database</div>
         <div>Latest report: {latestDate}</div>
       </div>
     </section>
@@ -57,18 +51,72 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
             </p>
           </div>
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-700">
-            {formatNumber(liveAnalytics.records.included_in_kpis)} complete days included / {formatNumber(liveAnalytics.records.total)} records
+            {formatNumber(liveAnalytics.records.included_in_kpis)} completed reports included / {formatNumber(liveAnalytics.records.total)} records
           </span>
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Metric label="Mapped fuel revenue" value={formatGmd(liveAnalytics.kpis.revenue_gmd)} detail="GMD · completed days only" />
           <Metric label="PMS volume" value={formatLitres(liveAnalytics.kpis.pms_litres)} detail="Litres · completed days only" />
-          <Metric label="AGO volume" value={formatLitres(liveAnalytics.kpis.ago_litres)} detail="Litres · mapped records" />
+          <Metric label="AGO volume" value={formatLitres(liveAnalytics.kpis.ago_litres)} detail="Litres · completed reports only" />
+          <Metric
+            label="Coupon sales"
+            value={formatGmd(liveAnalytics.kpis.coupon_sales_gmd)}
+            detail={
+              liveAnalytics.records.coupon_sales_reports < liveAnalytics.records.revenue_reports
+                ? `${formatNumber(liveAnalytics.records.coupon_sales_reports)} of ${formatNumber(liveAnalytics.records.revenue_reports)} revenue reports include coupon values`
+                : liveAnalytics.kpis.coupon_sales_gmd === null || !liveAnalytics.kpis.revenue_gmd
+                ? "Contribution unavailable"
+                : `${((liveAnalytics.kpis.coupon_sales_gmd / liveAnalytics.kpis.revenue_gmd) * 100).toFixed(1)}% of mapped revenue`
+            }
+          />
           <Metric label="Validation warnings" value={formatNumber(liveAnalytics.validation_warning_count)} detail="Warnings recorded in PostgreSQL" />
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Metric label="Average revenue per report" value={formatGmd(liveAnalytics.kpis.average_revenue_per_completed_report_gmd)} detail="GMD per completed station report with revenue" />
+          <Metric label="Average selling price" value={liveAnalytics.kpis.average_selling_price_gmd_per_litre === null ? '—' : `D${liveAnalytics.kpis.average_selling_price_gmd_per_litre.toFixed(2)} / L`} detail={`${formatNumber(liveAnalytics.records.price_calculation_reports)} reports with both revenue and volume`} />
+        </section>
+        <p className="text-[11px] text-slate-500">
+          Coupon customer rankings are not shown because the supported workbook layouts currently provide coupon totals, not named coupon transactions.
+        </p>
+
+        <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-950">Monthly fuel volume</h2>
+            <p className="mt-1 text-xs text-slate-500">AGO and PMS totals for completed reports in the selected period</p>
+            <div className="mt-4">
+              <FuelComparisonChart
+                data={liveAnalytics.monthly_trends.map((item) => ({ label: item.month, pmsValue: item.pms_litres, agoValue: item.ago_litres }))}
+                unit="L"
+              />
+            </div>
+            <div className="mt-3 divide-y divide-slate-100">
+              {liveAnalytics.monthly_trends.map((item) => <div key={item.month} className="flex justify-between gap-3 py-2 text-xs">
+                <span className="font-medium text-slate-700">{item.month} · {item.completed_reports} completed reports</span>
+                <span className="text-right font-mono tabular-nums text-slate-900">{formatGmd(item.revenue_gmd)}<span className="block text-[10px] text-slate-500">Coupons {formatGmd(item.coupon_sales_gmd)}</span></span>
+              </div>)}
+            </div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm space-y-5">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-950">Shift volume distribution</h2>
+              <p className="mt-1 text-xs text-slate-500">Aggregated recorded shift litres across included completed reports</p>
+            </div>
+            <ShiftSplitBars label="PMS" morning={liveAnalytics.shift_totals.pms.morning} afternoon={liveAnalytics.shift_totals.pms.afternoon} night={liveAnalytics.shift_totals.pms.night} accentClass="bg-teal-700" />
+            <ShiftSplitBars label="AGO" morning={liveAnalytics.shift_totals.ago.morning} afternoon={liveAnalytics.shift_totals.ago.afternoon} night={liveAnalytics.shift_totals.ago.night} accentClass="bg-amber-700" />
+            <div className="border-t border-slate-100 pt-3">
+              <div className="text-xs font-semibold text-slate-800">Missing shift entries in mapped reports</div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-600">
+                <div>Morning: <strong className="font-mono tabular-nums text-slate-900">{formatNumber(liveAnalytics.missing_shift_entries.morning)}</strong></div>
+                <div>Afternoon: <strong className="font-mono tabular-nums text-slate-900">{formatNumber(liveAnalytics.missing_shift_entries.afternoon)}</strong></div>
+                <div>Night: <strong className="font-mono tabular-nums text-slate-900">{formatNumber(liveAnalytics.missing_shift_entries.night)}</strong></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between gap-2">
             <div><h2 className="text-sm font-semibold text-slate-950">Station performance</h2>
@@ -78,7 +126,11 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
           {liveAnalytics.stations.length ? <div className="divide-y divide-slate-100">
             {liveAnalytics.stations.map((station) => <div key={station.station_name} className="grid grid-cols-2 gap-2 py-3 text-xs">
               <div className="font-semibold text-slate-800">{station.station_name}<div className="mt-1 font-normal text-slate-500">{formatNumber(station.report_count)} reports</div></div>
-              <div className="text-right font-mono tabular-nums text-slate-800">{formatGmd(station.revenue_gmd)}<div className="mt-1 text-slate-500">{formatLitres((station.pms_litres ?? 0) + (station.ago_litres ?? 0))}</div></div>
+              <div className="text-right font-mono tabular-nums text-slate-800">
+                {formatGmd(station.revenue_gmd)}
+                <div className="mt-1 text-slate-500">{formatLitres((station.pms_litres ?? 0) + (station.ago_litres ?? 0))}</div>
+                <div className="mt-1 text-[10px] text-slate-500">PMS {formatGmd(station.pms_revenue_gmd)} · AGO {formatGmd(station.ago_revenue_gmd)}</div>
+              </div>
             </div>)}
           </div> : <p className="py-6 text-xs text-slate-500">No mapped station totals are available for this period.</p>}
         </div>

@@ -16,7 +16,6 @@ import { sanitizeId } from './lib/formatters';
 import {
   commitParsedWorkbookBundle,
   deleteReportPreset,
-  getOrCreateUserProfile,
   loadWorkspaceData,
   logAuditAction,
   recordManualSyncRun,
@@ -25,7 +24,7 @@ import {
   type WorkspaceData,
 } from './services/workspaceRepository';
 import { buildHistoricalSeedDataset } from './services/seedData';
-import { apiLogin, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionReports, apiProductionMonitor, apiReprocessLegacy2022, type LiveAnalyticsOverview, type ProductionReportsResponse, type ProductionMonitorResponse } from './services/api';
+import { apiLogin, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionMetadata, apiUpdateStationTankCapacities, apiProductionReports, apiProductionMonitor, apiReprocessLegacy2022, type LiveAnalyticsOverview, type ProductionMetadataResponse, type ProductionReportsResponse, type ProductionMonitorResponse } from './services/api';
 import { parseExcelWorkbook } from './services/workbookEngine';
 import type {
   DailyReport,
@@ -84,8 +83,11 @@ export default function App() {
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [liveAnalytics, setLiveAnalytics] = useState<LiveAnalyticsOverview | null>(null);
   const [liveAnalyticsError, setLiveAnalyticsError] = useState<string | null>(null);
+  const [productionMetadata, setProductionMetadata] = useState<ProductionMetadataResponse | null>(null);
   const [productionData, setProductionData] = useState<ProductionReportsResponse | null>(null);
   const [productionDataError, setProductionDataError] = useState<string | null>(null);
+  const [loadingProductionData, setLoadingProductionData] = useState(false);
+  const [loadedReportFilterKey, setLoadedReportFilterKey] = useState<string | null>(null);
   const [productionMonitor, setProductionMonitor] = useState<ProductionMonitorResponse | null>(null);
 
   const [workspace, setWorkspace] = useState<WorkspaceData>(() => emptyWorkspace());
@@ -107,7 +109,7 @@ export default function App() {
   });
 
   // Canonical production station options are deduplicated case-insensitively by the API.
-  const productionStations = useMemo<Station[]>(() => (productionData?.stations ?? []).map((station) => ({
+  const productionStations = useMemo<Station[]>(() => (productionMetadata?.stations ?? []).map((station) => ({
     ownerUid: '',
     stationId: station.stationId,
     canonicalName: station.canonicalName,
@@ -116,11 +118,11 @@ export default function App() {
     aliases: [station.canonicalName],
     activeStatus: 'active',
     pumpCount: 0,
-    tankCapacityPms: 0,
-    tankCapacityAgo: 0,
+    tankCapacityPms: station.tankCapacityPms ?? 0,
+    tankCapacityAgo: station.tankCapacityAgo ?? 0,
     createdAt: '',
     updatedAt: '',
-  })), [productionData]);
+  })), [productionMetadata]);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -185,46 +187,87 @@ export default function App() {
     setUserProfile(PREVIEW_USER);
   };
 
+  const handleSaveStationTankCapacities = async (
+    stationName: string,
+    pmsCapacityLitres: number | null,
+    agoCapacityLitres: number | null,
+  ) => {
+    try {
+      await apiUpdateStationTankCapacities(stationName, pmsCapacityLitres, agoCapacityLitres);
+      setProductionMetadata(await apiProductionMetadata());
+      setAuthNotice(`Tank capacities saved for ${stationName}.`);
+    } catch (err) {
+      setAuthNotice(err instanceof Error ? err.message : "Unable to save station tank capacities.");
+      throw err;
+    }
+  };
+
   useEffect(() => {
     if (!isAuthenticated) {
       setLiveAnalytics(null);
       setLiveAnalyticsError(null);
+      setProductionMetadata(null);
       setProductionData(null);
       setProductionDataError(null);
+      setLoadingProductionData(false);
+      setLoadedReportFilterKey(null);
       setProductionMonitor(null);
       return;
     }
     let active = true;
     const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
     const requestFilters = { year: filters.year, month: filters.month, station: stationName };
-    (async () => {
-      // Load the operational report dataset independently first. An overview
-      // analytics failure must not prevent every other reporting tab from loading.
-      try {
-        const production = await apiProductionReports(requestFilters);
-        if (active) {
-          setProductionData(production);
-          setProductionDataError(null);
-        }
-      } catch (err) {
-        if (active) {
-          setProductionDataError(err instanceof Error ? err.message : 'Unable to load production reports.');
-        }
-      }
-      try {
-        const analytics = await apiAnalyticsOverview(requestFilters);
+
+    // Dashboard startup loads compact filter metadata and server-side KPIs only.
+    // Full report JSON is deferred until the user opens a report-heavy section.
+    apiProductionMetadata()
+      .then((metadata) => { if (active) setProductionMetadata(metadata); })
+      .catch((err) => {
+        if (active) setProductionDataError(err instanceof Error ? err.message : 'Unable to load production metadata.');
+      });
+    apiAnalyticsOverview(requestFilters)
+      .then((analytics) => {
         if (active) {
           setLiveAnalytics(analytics);
           setLiveAnalyticsError(null);
         }
-      } catch (err) {
-        if (active) {
-          setLiveAnalyticsError(err instanceof Error ? err.message : 'Unable to load executive analytics.');
-        }
-      }
-    })();
+      })
+      .catch((err) => {
+        if (active) setLiveAnalyticsError(err instanceof Error ? err.message : 'Unable to load executive analytics.');
+      });
     return () => { active = false; };
   }, [isAuthenticated, filters.year, filters.month, filters.stationId]);
+
+  const reportRoutes: RouteId[] = [
+    'stations', 'station-detail', 'fuel-sales', 'pump-performance', 'stock-control',
+    'deliveries', 'reconciliation', 'historical', 'reports',
+  ];
+
+  useEffect(() => {
+    if (!isAuthenticated || !reportRoutes.includes(activeRoute)) return;
+    const filterKey = `${filters.year}|${filters.month}|${filters.stationId}`;
+    if (loadedReportFilterKey === filterKey && productionData !== null) return;
+    let active = true;
+    const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
+    const requestFilters = { year: filters.year, month: filters.month, station: stationName };
+    setLoadingProductionData(true);
+    setProductionDataError(null);
+    apiProductionReports(requestFilters)
+      .then((production) => {
+        if (active) {
+          setProductionData(production);
+          setLoadedReportFilterKey(filterKey);
+          setProductionDataError(null);
+        }
+      })
+      .catch((err) => {
+        if (active) setProductionDataError(err instanceof Error ? err.message : 'Unable to load production reports.');
+      })
+      .finally(() => {
+        if (active) setLoadingProductionData(false);
+      });
+    return () => { active = false; };
+  }, [isAuthenticated, activeRoute, filters.year, filters.month, filters.stationId, loadedReportFilterKey, productionData]);
 
   // The sync monitor is only needed on its own page. Deferring it avoids an
   // extra database request during sign-in and ordinary dashboard navigation.
@@ -240,7 +283,7 @@ export default function App() {
     return () => { active = false; };
   }, [isAuthenticated, activeRoute]);
 
-  const years = productionData?.years ?? [];
+  const years = productionMetadata?.years ?? [];
 
   const filteredReports = useMemo(() => {
     const searchLower = filters.search.trim().toLowerCase();
@@ -283,11 +326,10 @@ export default function App() {
     }
     try {
       const result = await apiDropboxSync();
+      setLoadedReportFilterKey(null);
       setAuthNotice(`Dropbox sync completed: ${result.files_seen} files checked; ${result.new_or_changed} new or revised; ${result.tracked_workbooks} tracked. Extraction attempted: ${result.imports_attempted ?? 0}; succeeded: ${result.imports_succeeded ?? 0}; failed: ${result.imports_failed ?? 0}.`);
       const requestFilters = { year: filters.year, month: filters.month, station: filters.stationId === 'ALL' ? undefined : filters.stationId };
-      const production = await apiProductionReports(requestFilters);
-      setProductionData(production);
-      setProductionDataError(null);
+      setProductionMetadata(await apiProductionMetadata());
       try {
         setLiveAnalytics(await apiAnalyticsOverview(requestFilters));
         setLiveAnalyticsError(null);
@@ -303,13 +345,12 @@ export default function App() {
   const handleReprocessLegacy2022 = async () => {
     try {
       const result = await apiReprocessLegacy2022();
+      setLoadedReportFilterKey(null);
       const summary = `2022 Kotu reprocessing: ${result.workbooks_succeeded}/${result.workbooks_attempted} workbooks succeeded; ${result.workbooks_failed} failed.`;
       setAuthNotice(summary);
       const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
       const requestFilters = { year: filters.year, month: filters.month, station: stationName };
-      const production = await apiProductionReports(requestFilters);
-      setProductionData(production);
-      setProductionDataError(null);
+      setProductionMetadata(await apiProductionMetadata());
       try {
         setLiveAnalytics(await apiAnalyticsOverview(requestFilters));
         setLiveAnalyticsError(null);
@@ -495,15 +536,14 @@ export default function App() {
           </div>
         )}
 
+        {loadingProductionData && reportRoutes.includes(activeRoute) && (
+          <div className="mb-4 p-3 bg-white border border-slate-200 rounded-md text-xs text-slate-600">
+            Loading detailed production reports…
+          </div>
+        )}
+
         {activeRoute === 'dashboard' && (
           <ExecutiveOverview
-            reports={filteredReports}
-            stations={productionStations}
-            workbooks={productionMonitor?.workbooks ?? []}
-            warnings={filteredWarnings}
-            reconciliations={filteredReconciliations}
-            onInspectReport={setInspectedReport}
-            onSelectStation={(id) => navigate('station-detail', id)}
             onNavigate={(r) => navigate(r, null)}
             liveAnalytics={liveAnalytics}
             liveAnalyticsError={liveAnalyticsError}
@@ -520,6 +560,8 @@ export default function App() {
               id ? navigate('station-detail', id) : navigate('stations', null)
             }
             onInspectReport={setInspectedReport}
+            canManageStations={userProfile.role === 'admin'}
+            onSaveTankCapacities={handleSaveStationTankCapacities}
           />
         )}
 
@@ -542,6 +584,7 @@ export default function App() {
         {activeRoute === 'stock-control' && (
           <StockControlView
             reports={filteredReports}
+            stations={productionStations}
             fuelFilter={filters.fuelType}
             onInspectReport={setInspectedReport}
           />
