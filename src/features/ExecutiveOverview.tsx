@@ -62,7 +62,9 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
             label="Coupon sales"
             value={formatGmd(liveAnalytics.kpis.coupon_sales_gmd)}
             detail={
-              liveAnalytics.kpis.coupon_sales_gmd === null || !liveAnalytics.kpis.revenue_gmd
+              liveAnalytics.records.coupon_sales_reports < liveAnalytics.records.revenue_reports
+                ? `${formatNumber(liveAnalytics.records.coupon_sales_reports)} of ${formatNumber(liveAnalytics.records.revenue_reports)} revenue reports include coupon values`
+                : liveAnalytics.kpis.coupon_sales_gmd === null || !liveAnalytics.kpis.revenue_gmd
                 ? "Contribution unavailable"
                 : `${((liveAnalytics.kpis.coupon_sales_gmd / liveAnalytics.kpis.revenue_gmd) * 100).toFixed(1)}% of mapped revenue`
             }
@@ -73,7 +75,7 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="Average revenue per report" value={formatGmd(liveAnalytics.kpis.average_revenue_per_completed_report_gmd)} detail="GMD per completed station report with revenue" />
-          <Metric label="Average selling price" value={liveAnalytics.kpis.average_selling_price_gmd_per_litre === null ? '—' : `D${liveAnalytics.kpis.average_selling_price_gmd_per_litre.toFixed(2)} / L`} detail="Mapped fuel revenue ÷ mapped litres" />
+          <Metric label="Average selling price" value={liveAnalytics.kpis.average_selling_price_gmd_per_litre === null ? '—' : `D${liveAnalytics.kpis.average_selling_price_gmd_per_litre.toFixed(2)} / L`} detail={`${formatNumber(liveAnalytics.records.price_calculation_reports)} reports with both revenue and volume`} />
         </section>
 
         <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
