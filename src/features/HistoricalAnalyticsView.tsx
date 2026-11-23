@@ -31,6 +31,11 @@ export function HistoricalAnalyticsView({
       : report.totalFuelSalesGmd,
   }));
 
+  const matrixReports = allReports.map((report) => ({
+    ...report,
+    pmsTotalLitres: fuelFilter === 'AGO' ? null : report.pmsTotalLitres,
+    agoTotalLitres: fuelFilter === 'PMS' ? null : report.agoTotalLitres,
+  }));
   const years = Array.from(new Set(scopedReports.map((r) => r.year))).sort((a, b) => a - b);
 
   const annualRows = years.map((yr, idx) => {
@@ -157,7 +162,7 @@ export function HistoricalAnalyticsView({
                     {st.canonicalName}
                   </td>
                   {years.map((y) => {
-                    const list = selectedReports.filter((r) => r.stationId === st.stationId && r.year === y);
+                    const list = matrixReports.filter((r) => r.stationId === st.stationId && r.year === y);
                     const totalL = sumNullable(
                       list.map((r) => (r.pmsTotalLitres ?? 0) + (r.agoTotalLitres ?? 0))
                     );
