@@ -67,7 +67,7 @@ export interface LiveAnalyticsOverview {
     cash_reconciliation_difference_gmd: number | null;
     pms_stock_difference_litres: number | null;
     ago_stock_difference_litres: number | null;
-    average_daily_revenue_gmd: number | null;
+    average_revenue_per_completed_report_gmd: number | null;
     average_selling_price_gmd_per_litre: number | null;
   };
   monthly_trends: Array<{
@@ -75,7 +75,7 @@ export interface LiveAnalyticsOverview {
     pms_litres: number;
     ago_litres: number;
     revenue_gmd: number;
-    completed_days: number;
+    completed_reports: number;
     total_volume_litres: number;
   }>;
   shift_totals: {
