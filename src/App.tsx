@@ -25,7 +25,7 @@ import {
   type WorkspaceData,
 } from './services/workspaceRepository';
 import { buildHistoricalSeedDataset } from './services/seedData';
-import { apiLogin, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionMetadata, apiProductionReports, apiProductionMonitor, apiReprocessLegacy2022, type LiveAnalyticsOverview, type ProductionMetadataResponse, type ProductionReportsResponse, type ProductionMonitorResponse } from './services/api';
+import { apiLogin, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionMetadata, apiUpdateStationTankCapacities, apiProductionReports, apiProductionMonitor, apiReprocessLegacy2022, type LiveAnalyticsOverview, type ProductionMetadataResponse, type ProductionReportsResponse, type ProductionMonitorResponse } from './services/api';
 import { parseExcelWorkbook } from './services/workbookEngine';
 import type {
   DailyReport,
@@ -117,8 +117,8 @@ export default function App() {
     aliases: [station.canonicalName],
     activeStatus: 'active',
     pumpCount: 0,
-    tankCapacityPms: 0,
-    tankCapacityAgo: 0,
+    tankCapacityPms: station.tankCapacityPms ?? 0,
+    tankCapacityAgo: station.tankCapacityAgo ?? 0,
     createdAt: '',
     updatedAt: '',
   })), [productionMetadata]);
@@ -184,6 +184,21 @@ export default function App() {
     apiLogout();
     setIsAuthenticated(false);
     setUserProfile(PREVIEW_USER);
+  };
+
+  const handleSaveStationTankCapacities = async (
+    stationName: string,
+    pmsCapacityLitres: number | null,
+    agoCapacityLitres: number | null,
+  ) => {
+    try {
+      await apiUpdateStationTankCapacities(stationName, pmsCapacityLitres, agoCapacityLitres);
+      setProductionMetadata(await apiProductionMetadata());
+      setAuthNotice(`Tank capacities saved for ${stationName}.`);
+    } catch (err) {
+      setAuthNotice(err instanceof Error ? err.message : "Unable to save station tank capacities.");
+      throw err;
+    }
   };
 
   useEffect(() => {
@@ -526,6 +541,8 @@ export default function App() {
               id ? navigate('station-detail', id) : navigate('stations', null)
             }
             onInspectReport={setInspectedReport}
+            canManageStations={userProfile.role === 'admin'}
+            onSaveTankCapacities={handleSaveStationTankCapacities}
           />
         )}
 
