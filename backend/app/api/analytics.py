@@ -172,9 +172,9 @@ def overview(
         month_key = report_date.strftime("%Y-%m")
         month_item = monthly_totals.setdefault(month_key, {
             "month": month_key, "pms_litres": 0.0, "ago_litres": 0.0,
-            "revenue_gmd": 0.0, "completed_days": 0,
+            "revenue_gmd": 0.0, "completed_reports": 0,
         })
-        month_item["completed_days"] += 1
+        month_item["completed_reports"] += 1
         if pms is not None:
             month_item["pms_litres"] += pms
         if ago is not None:
@@ -262,7 +262,7 @@ def overview(
         },
         "kpis": {
             **{key: _nullable(*value) for key, value in sums.items()},
-            "average_daily_revenue_gmd": round(sums["revenue_gmd"][0] / counts["included"], 2) if counts["included"] and sums["revenue_gmd"][1] else None,
+            "average_revenue_per_completed_report_gmd": round(sums["revenue_gmd"][0] / sums["revenue_gmd"][1], 2) if sums["revenue_gmd"][1] else None,
             "average_selling_price_gmd_per_litre": round(
                 sums["revenue_gmd"][0] / (sums["pms_litres"][0] + sums["ago_litres"][0]), 4
             ) if sums["revenue_gmd"][1] and (sums["pms_litres"][0] + sums["ago_litres"][0]) > 0 else None,
