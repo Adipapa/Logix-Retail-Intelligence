@@ -70,7 +70,7 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
       </section>
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="Average daily revenue" value={formatGmd(liveAnalytics.kpis.average_daily_revenue_gmd)} detail="GMD per included completed day" />
+          <Metric label="Average revenue per report" value={formatGmd(liveAnalytics.kpis.average_revenue_per_completed_report_gmd)} detail="GMD per completed station report with revenue" />
           <Metric label="Average selling price" value={liveAnalytics.kpis.average_selling_price_gmd_per_litre === null ? '—' : `D${liveAnalytics.kpis.average_selling_price_gmd_per_litre.toFixed(2)} / L`} detail="Mapped fuel revenue ÷ mapped litres" />
         </section>
 
@@ -86,7 +86,7 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
             </div>
             <div className="mt-3 divide-y divide-slate-100">
               {liveAnalytics.monthly_trends.map((item) => <div key={item.month} className="flex justify-between gap-3 py-2 text-xs">
-                <span className="font-medium text-slate-700">{item.month} · {item.completed_days} completed days</span>
+                <span className="font-medium text-slate-700">{item.month} · {item.completed_reports} completed reports</span>
                 <span className="font-mono tabular-nums text-slate-900">{formatGmd(item.revenue_gmd)}</span>
               </div>)}
             </div>
