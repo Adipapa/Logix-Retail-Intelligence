@@ -1,10 +1,11 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_admin
 from app.database.session import get_db
 from app.models.operations import DailyReport, ImportJob, ImportWarning, SourceWorkbook, Station as StationModel, SummarySnapshot
 from app.models.integration import DropboxFile, DropboxSyncState
@@ -492,19 +493,60 @@ def production_metadata(
             )
         ).all() if value is not None
     ]
-    names = set(db.scalars(
-        select(StationModel.name).where(StationModel.active.is_(True))
-    ).all())
+    station_rows = db.scalars(
+        select(StationModel).where(StationModel.active.is_(True))
+    ).all()
+    names = {row.name for row in station_rows}
     names.update(db.scalars(select(DailyReport.station_name).distinct()).all())
+    capacity_by_name = {
+        row.name.strip().casefold(): row for row in station_rows
+    }
     stations = {}
     for value in names:
         display = _canonical_station(value)
+        configured = capacity_by_name.get((value or "").strip().casefold())
         stations.setdefault(display.casefold(), {
-            "stationId": display, "canonicalName": display, "territory": ""
+            "stationId": display,
+            "canonicalName": display,
+            "territory": "",
+            "tankCapacityPms": configured.pms_tank_capacity_litres if configured else None,
+            "tankCapacityAgo": configured.ago_tank_capacity_litres if configured else None,
         })
     return {
         "years": available_years,
         "stations": sorted(stations.values(), key=lambda item: item["canonicalName"].casefold()),
+    }
+
+
+@router.put("/station-capacities")
+def update_station_tank_capacities(
+    payload: StationTankCapacityInput,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    station_name = payload.station_name.strip()
+    if payload.pms_tank_capacity_litres is None and payload.ago_tank_capacity_litres is None:
+        raise HTTPException(status_code=422, detail="Enter at least one tank capacity.")
+    station_key = station_name.casefold()
+    station = db.scalar(
+        select(StationModel).where(func.lower(func.trim(StationModel.name)) == station_key)
+    )
+    if station is None:
+        station = StationModel(
+            station_key=station_key[:100],
+            name=_canonical_station(station_name),
+            folder_path="",
+            active=True,
+        )
+        db.add(station)
+    station.pms_tank_capacity_litres = payload.pms_tank_capacity_litres
+    station.ago_tank_capacity_litres = payload.ago_tank_capacity_litres
+    db.commit()
+    db.refresh(station)
+    return {
+        "station_name": station.name,
+        "pms_tank_capacity_litres": station.pms_tank_capacity_litres,
+        "ago_tank_capacity_litres": station.ago_tank_capacity_litres,
     }
 
 
