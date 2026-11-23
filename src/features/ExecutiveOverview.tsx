@@ -61,10 +61,19 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
             {formatNumber(liveAnalytics.records.included_in_kpis)} complete days included / {formatNumber(liveAnalytics.records.total)} records
           </span>
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Metric label="Mapped fuel revenue" value={formatGmd(liveAnalytics.kpis.revenue_gmd)} detail="GMD · completed days only" />
           <Metric label="PMS volume" value={formatLitres(liveAnalytics.kpis.pms_litres)} detail="Litres · completed days only" />
           <Metric label="AGO volume" value={formatLitres(liveAnalytics.kpis.ago_litres)} detail="Litres · mapped records" />
+          <Metric
+            label="Coupon sales"
+            value={formatGmd(liveAnalytics.kpis.coupon_sales_gmd)}
+            detail={
+              liveAnalytics.kpis.coupon_sales_gmd === null || !liveAnalytics.kpis.revenue_gmd
+                ? "Contribution unavailable"
+                : `${((liveAnalytics.kpis.coupon_sales_gmd / liveAnalytics.kpis.revenue_gmd) * 100).toFixed(1)}% of mapped revenue`
+            }
+          />
           <Metric label="Validation warnings" value={formatNumber(liveAnalytics.validation_warning_count)} detail="Warnings recorded in PostgreSQL" />
         </div>
       </section>
