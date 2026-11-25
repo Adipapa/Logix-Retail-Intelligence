@@ -130,19 +130,20 @@ function Heatmap({ rows, columns, values, format = 'litres' }: {
   </div>;
 }
 
-function Composition({ pms, ago }: { pms: number; ago: number }) {
+function Composition({ pms, ago, unit = 'litres' }: { pms: number; ago: number; unit?: 'litres' | 'gmd' }) {
   const total = pms + ago;
   if (!total) return <div className="py-12 text-center text-xs text-slate-500">No sales volume recorded.</div>;
   const pmsPct = pms / total * 100;
   const agoPct = ago / total * 100;
+  const formatValue = (value: number) => unit === 'gmd' ? formatGmd(value) : formatLitres(value);
   return <div className="space-y-4">
     <div className="flex h-8 overflow-hidden rounded-md bg-slate-100">
       <div className="h-full bg-teal-700 transition-all" style={{ width: `${pmsPct}%` }} />
       <div className="h-full bg-amber-600 transition-all" style={{ width: `${agoPct}%` }} />
     </div>
     <div className="grid grid-cols-2 gap-3">
-      <div className="rounded-lg bg-teal-50 p-3"><div className="text-[11px] font-medium text-teal-800">PMS · Petrol</div><div className="mt-1 text-lg font-semibold tabular-nums text-teal-950">{pmsPct.toFixed(1)}%</div><div className="mt-1 text-xs text-teal-800">{formatLitres(pms)}</div></div>
-      <div className="rounded-lg bg-amber-50 p-3"><div className="text-[11px] font-medium text-amber-800">AGO · Diesel</div><div className="mt-1 text-lg font-semibold tabular-nums text-amber-950">{agoPct.toFixed(1)}%</div><div className="mt-1 text-xs text-amber-800">{formatLitres(ago)}</div></div>
+      <div className="rounded-lg bg-teal-50 p-3"><div className="text-[11px] font-medium text-teal-800">PMS · Petrol</div><div className="mt-1 text-lg font-semibold tabular-nums text-teal-950">{pmsPct.toFixed(1)}%</div><div className="mt-1 text-xs text-teal-800">{formatValue(pms)}</div></div>
+      <div className="rounded-lg bg-amber-50 p-3"><div className="text-[11px] font-medium text-amber-800">AGO · Diesel</div><div className="mt-1 text-lg font-semibold tabular-nums text-amber-950">{agoPct.toFixed(1)}%</div><div className="mt-1 text-xs text-amber-800">{formatValue(ago)}</div></div>
     </div>
   </div>;
 }
@@ -342,7 +343,7 @@ export function ExecutiveOverview({ reports, allReports }: ExecutiveOverviewProp
         <Panel title="Sales volume trend" subtitle={`Litres by ${periodMode}; selected shift and fuel filters apply.`}><FuelComparisonChart data={volumeTrend} unit="L" showPms={fuelMode !== 'ago'} showAgo={fuelMode !== 'pms'} height={260} /></Panel>
         <Panel title="Sales revenue trend" subtitle={`Recorded PMS and AGO revenue by ${periodMode}; shift filter does not apply to revenue.`}><FuelComparisonChart data={revenueTrend} unit="GMD" showPms={fuelMode !== 'ago'} showAgo={fuelMode !== 'pms'} height={260} /></Panel>
         <Panel title="Fuel sales composition" subtitle="Share of recorded PMS and AGO volume for the current selection."><Composition pms={fuelMode === 'ago' ? 0 : totals.pms} ago={fuelMode === 'pms' ? 0 : totals.ago} /></Panel>
-        <Panel title="Revenue composition" subtitle="PMS and AGO share of recorded sales revenue."><Composition pms={fuelMode === 'ago' ? 0 : filtered.reduce((s, r) => s + positive(r.pmsSalesGmd), 0)} ago={fuelMode === 'pms' ? 0 : filtered.reduce((s, r) => s + positive(r.agoSalesGmd), 0)} /></Panel>
+        <Panel title="Revenue composition" subtitle="PMS and AGO share of recorded sales revenue."><Composition unit="gmd" pms={fuelMode === 'ago' ? 0 : filtered.reduce((s, r) => s + positive(r.pmsSalesGmd), 0)} ago={fuelMode === 'pms' ? 0 : filtered.reduce((s, r) => s + positive(r.agoSalesGmd), 0)} /></Panel>
       </div>
     </div>
 
