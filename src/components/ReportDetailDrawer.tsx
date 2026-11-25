@@ -8,286 +8,207 @@ interface ReportDetailDrawerProps {
   onClose: () => void;
 }
 
+function SheetTable({ title, headers, children, className = '' }: {
+  title: string;
+  headers: string[];
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`border-2 border-slate-900 bg-white ${className}`}>
+      <div className="border-b-2 border-slate-900 px-2 py-1 text-center text-[11px] font-bold uppercase tracking-wide text-slate-900">
+        {title}
+      </div>
+      <table className="w-full table-fixed border-collapse text-[10px] leading-tight">
+        <thead>
+          <tr className="bg-slate-100">
+            {headers.map((header) => (
+              <th key={header} className="border border-slate-700 px-1.5 py-1 text-center font-bold text-slate-800">
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+    </section>
+  );
+}
+
+function SheetRow({ label, values, strong = false, alert = false }: {
+  label: string;
+  values: string[];
+  strong?: boolean;
+  alert?: boolean;
+}) {
+  return (
+    <tr className={strong ? 'bg-slate-100 font-bold' : ''}>
+      <td className="border border-slate-700 px-1.5 py-1 font-semibold text-slate-800">{label}</td>
+      {values.map((value, index) => (
+        <td key={index} className={`border border-slate-700 px-1.5 py-1 text-right font-mono tabular-nums ${alert ? 'bg-rose-100 text-rose-700 font-bold' : 'text-slate-900'}`}>
+          {value}
+        </td>
+      ))}
+    </tr>
+  );
+}
+
 export function ReportDetailDrawer({ report, onClose }: ReportDetailDrawerProps) {
   if (!report) return null;
 
+  const money = (value: number | null | undefined) => value == null ? '' : formatGmd(value);
+  const litres = (value: number | null | undefined) => value == null ? '' : formatLitres(value);
+  const pumpRows = report.pumpReadings ?? [];
+  const deliveryPresent = [
+    report.directDeliveryLitres, report.diversionLitres, report.shortageLitres,
+    report.receivedLitres, report.deliveryOrigin, report.deliveryDestination,
+  ].some((value) => value !== null && value !== undefined && value !== '');
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40" role="dialog" aria-modal="true">
-      <div className="w-full max-w-2xl bg-white h-full overflow-y-auto border-l border-slate-200 flex flex-col">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-10">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span>{report.stationName}</span>
-              <span aria-hidden="true">·</span>
-              <span>{report.territory}</span>
-              <span aria-hidden="true">·</span>
-              <span className="font-mono">{report.reportDate}</span>
-            </div>
-            <h2 className="text-base font-semibold text-slate-900 mt-0.5">
-              Daily Report Source Lineage & Audit View
-            </h2>
+    <div className="fixed inset-0 z-50 bg-slate-950/60 p-2 sm:p-4" role="dialog" aria-modal="true" aria-label="Daily report source lineage and audit view">
+      <div className="mx-auto flex h-full w-full max-w-[1800px] flex-col overflow-hidden border border-slate-300 bg-white shadow-2xl">
+        <header className="flex shrink-0 items-center justify-between border-b-2 border-slate-900 px-3 py-2">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+            <div className="text-xs"><span className="font-bold">Station:</span> <span className="ml-2 text-sm font-bold uppercase">{report.stationName}</span></div>
+            <div className="text-xs"><span className="font-bold">Territory:</span> <span className="ml-1">{report.territory || '—'}</span></div>
+            <div className="text-xs"><span className="font-bold">Date:</span> <span className="ml-2 font-mono font-bold">{report.reportDate}</span></div>
+            <div className="text-xs"><span className="font-bold">Weekday:</span> <span className="ml-1">{report.weekday || '—'}</span></div>
+            <div className="flex items-center gap-2"><StatusLabel status={report.completeness} /></div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 text-slate-500 hover:text-slate-900 rounded-md hover:bg-slate-100 transition-colors"
-            aria-label="Close lineage drawer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+          <div className="flex items-center gap-2">
+            <span className="hidden text-[10px] font-semibold uppercase tracking-wide text-slate-500 lg:inline">Daily Report Source Lineage & Audit View</span>
+            <button type="button" onClick={onClose} className="rounded border border-slate-300 p-1.5 text-slate-600 hover:bg-slate-100" aria-label="Close lineage view">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
 
-        <div className="p-6 space-y-6 text-sm">
-          {/* Source Lineage */}
-          <section className="border border-slate-200 rounded-md p-4 bg-slate-50/70">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 font-semibold text-slate-900 text-xs uppercase tracking-wider">
-                <FileSpreadsheet className="w-4 h-4 text-blue-700" aria-hidden="true" />
-                <span>Workbook Traceability</span>
-              </div>
-              <StatusLabel status={report.completeness} />
+        <main className="min-h-0 flex-1 overflow-auto bg-slate-100 p-2 sm:p-3">
+          <div className="grid min-w-[1000px] grid-cols-[minmax(0,2.05fr)_minmax(190px,0.82fr)_minmax(260px,1.05fr)] items-start gap-3">
+            <div className="space-y-3">
+              <SheetTable title="Pump Meter Readings & Shift Sales" headers={['PUMP / ISLAND', 'PRODUCT', 'SHIFT', 'OPENING METER', 'CLOSING METER', 'THROUGHPUT']}>
+                {pumpRows.length ? pumpRows.map((pump, index) => (
+                  <tr key={`${pump.pumpId}-${pump.shift}-${index}`}>
+                    <td className="border border-slate-700 px-1.5 py-1 font-semibold">{pump.pumpId} · {pump.island}</td>
+                    <td className="border border-slate-700 px-1.5 py-1 text-center font-bold">{pump.product}</td>
+                    <td className="border border-slate-700 px-1.5 py-1">{pump.shift}</td>
+                    <td className="border border-slate-700 px-1.5 py-1 text-right font-mono">{pump.openingMeter == null ? '' : formatNumber(pump.openingMeter)}</td>
+                    <td className="border border-slate-700 px-1.5 py-1 text-right font-mono">{pump.closingMeter == null ? '' : formatNumber(pump.closingMeter)}</td>
+                    <td className={`border border-slate-700 px-1.5 py-1 text-right font-mono font-semibold ${pump.flag === 'negative_movement' ? 'text-rose-700' : ''}`}>{litres(pump.throughput)}</td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={6} className="border border-slate-700 px-2 py-3 text-center text-slate-500">No pump-level meter rows were extracted from this report.</td></tr>
+                )}
+              </SheetTable>
+
+              <SheetTable title="Product Sales by Shift" headers={['PRODUCT', 'MORNING (L)', 'AFTERNOON (L)', 'NIGHT (L)', 'TOTAL (L)', 'SALES (GMD)']}>
+                <tr>
+                  <td className="border border-slate-700 px-1.5 py-1 font-bold text-teal-800">PMS</td>
+                  {[report.pmsMorningLitres, report.pmsAfternoonLitres, report.pmsNightLitres, report.pmsTotalLitres].map((v, i) => <td key={i} className="border border-slate-700 px-1.5 py-1 text-right font-mono">{litres(v)}</td>)}
+                  <td className="border border-slate-700 px-1.5 py-1 text-right font-mono">{money(report.pmsSalesGmd)}</td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-700 px-1.5 py-1 font-bold text-amber-800">AGO</td>
+                  {[report.agoMorningLitres, report.agoAfternoonLitres, report.agoNightLitres, report.agoTotalLitres].map((v, i) => <td key={i} className="border border-slate-700 px-1.5 py-1 text-right font-mono">{litres(v)}</td>)}
+                  <td className="border border-slate-700 px-1.5 py-1 text-right font-mono">{money(report.agoSalesGmd)}</td>
+                </tr>
+                <tr className="bg-slate-100 font-bold">
+                  <td className="border border-slate-700 px-1.5 py-1">TOTAL</td>
+                  <td className="border border-slate-700 px-1.5 py-1 text-right font-mono">{litres((report.pmsMorningLitres ?? 0) + (report.agoMorningLitres ?? 0))}</td>
+                  <td className="border border-slate-700 px-1.5 py-1 text-right font-mono">{litres((report.pmsAfternoonLitres ?? 0) + (report.agoAfternoonLitres ?? 0))}</td>
+                  <td className="border border-slate-700 px-1.5 py-1 text-right font-mono">{litres((report.pmsNightLitres ?? 0) + (report.agoNightLitres ?? 0))}</td>
+                  <td className="border border-slate-700 px-1.5 py-1 text-right font-mono">{litres((report.pmsTotalLitres ?? 0) + (report.agoTotalLitres ?? 0))}</td>
+                  <td className="border border-slate-700 px-1.5 py-1 text-right font-mono">{money(report.totalFuelSalesGmd)}</td>
+                </tr>
+              </SheetTable>
+
+              <SheetTable title="Deliveries & Transfers — PMS / AGO" headers={['PRODUCT', 'ORIGIN', 'DESTINATION', 'DIRECT (L)', 'DIVERSION (L)', 'SHORTAGE (L)', 'RECEIVED (L)']}>
+                {deliveryPresent ? (
+                  <tr>
+                    <td className="border border-slate-700 px-1.5 py-1 font-bold">PMS / AGO</td>
+                    <td className="border border-slate-700 px-1.5 py-1">{report.deliveryOrigin || ''}</td>
+                    <td className="border border-slate-700 px-1.5 py-1">{report.deliveryDestination || ''}</td>
+                    {[report.directDeliveryLitres, report.diversionLitres, report.shortageLitres, report.receivedLitres].map((v, i) => <td key={i} className="border border-slate-700 px-1.5 py-1 text-right font-mono">{litres(v)}</td>)}
+                  </tr>
+                ) : (
+                  <tr><td colSpan={7} className="border border-slate-700 px-2 py-3 text-center text-slate-500">No delivery or transfer details recorded.</td></tr>
+                )}
+              </SheetTable>
             </div>
-            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div>
-                <dt className="text-slate-500">Dropbox Path</dt>
-                <dd className="font-mono text-slate-900 break-all mt-0.5">{report.workbookPath}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">Worksheet & Range</dt>
-                <dd className="font-mono text-slate-900 mt-0.5">
-                  {report.worksheetName} · {report.sourceRowRef || 'Daily Sheet'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">Dropbox Revision</dt>
-                <dd className="font-mono text-slate-900 mt-0.5">{report.workbookRevision}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">Workbook ID</dt>
-                <dd className="font-mono text-slate-900 mt-0.5">{report.workbookId}</dd>
-              </div>
-            </dl>
+
+            <div className="space-y-3">
+              <SheetTable title="Credit Sales" headers={['DETAIL', 'AMOUNT (GMD)']}>
+                <SheetRow label="Credit Sales" values={[money(report.creditSalesGmd)]} />
+                <SheetRow label="Total" values={[money(report.creditSalesGmd)]} strong />
+              </SheetTable>
+
+              <SheetTable title="Cheque" headers={['DETAIL', 'AMOUNT (GMD)']}>
+                <SheetRow label="Cheques" values={[money(report.chequesGmd)]} />
+                <SheetRow label="Total" values={[money(report.chequesGmd)]} strong />
+              </SheetTable>
+
+              <SheetTable title="Other Payment Channels" headers={['CHANNEL', 'AMOUNT (GMD)']}>
+                <SheetRow label="Coupons" values={[money(report.couponsGmd)]} />
+                <SheetRow label="QMoney" values={[money(report.qmoneyGmd)]} />
+                <SheetRow label="Waychit" values={[money(report.waychitGmd)]} />
+              </SheetTable>
+
+              <SheetTable title="Pump Return to Tank" headers={['PRODUCT', 'RETURN (L)']}>
+                <SheetRow label="PMS" values={[litres(report.pmsReturnToTankLitres)]} />
+                <SheetRow label="AGO" values={[litres(report.agoReturnToTankLitres)]} />
+              </SheetTable>
+            </div>
+
+            <div className="space-y-3">
+              <SheetTable title="Stock Control" headers={['STOCK POSITION', 'PMS (L)', 'AGO (L)']}>
+                <SheetRow label="Stock Opening (A)" values={[litres(report.pmsOpeningStock), litres(report.agoOpeningStock)]} />
+                <SheetRow label="Receipts (B)" values={[litres(report.pmsReceipts), litres(report.agoReceipts)]} />
+                <SheetRow label="Theoretical Stock (C)" values={[litres(report.pmsTheoreticalStock), litres(report.agoTheoreticalStock)]} />
+                <SheetRow label="Sales (D)" values={[litres(report.pmsTotalLitres), litres(report.agoTotalLitres)]} />
+                <SheetRow label="Closing Stock (E)" values={[litres(report.pmsClosingStock), litres(report.agoClosingStock)]} />
+                <SheetRow label="Difference" values={[litres(report.pmsStockDiff), litres(report.agoStockDiff)]} alert={(report.pmsStockDiff ?? 0) < 0 || (report.agoStockDiff ?? 0) < 0} />
+                <SheetRow label="Control (%)" values={[formatPercent(report.pmsStockControlRatio), formatPercent(report.agoStockControlRatio)]} strong />
+              </SheetTable>
+
+              <SheetTable title="Sales Summary" headers={['PRODUCT', 'VOLUME (L)', 'AMOUNT (GMD)']}>
+                <tr><td className="border border-slate-700 px-1.5 py-1 font-bold text-teal-800">PMS</td><td className="border border-slate-700 px-1.5 py-1 text-right font-mono">{litres(report.pmsTotalLitres)}</td><td className="border border-slate-700 px-1.5 py-1 text-right font-mono">{money(report.pmsSalesGmd)}</td></tr>
+                <tr><td className="border border-slate-700 px-1.5 py-1 font-bold text-amber-800">AGO</td><td className="border border-slate-700 px-1.5 py-1 text-right font-mono">{litres(report.agoTotalLitres)}</td><td className="border border-slate-700 px-1.5 py-1 text-right font-mono">{money(report.agoSalesGmd)}</td></tr>
+                <tr className="bg-slate-100 font-bold"><td colSpan={2} className="border border-slate-700 px-1.5 py-1">TOTAL</td><td className="border border-slate-700 px-1.5 py-1 text-right font-mono">{money(report.totalFuelSalesGmd)}</td></tr>
+              </SheetTable>
+
+              <SheetTable title="Utilities" headers={['ITEM', 'READING / AMOUNT']}>
+                <SheetRow label="Generator Runtime (hrs)" values={[report.generatorRuntimeHrs == null ? '' : formatNumber(report.generatorRuntimeHrs)]} />
+                <SheetRow label="Generator Refuel (L)" values={[litres(report.generatorRefuelLitres)]} />
+                <SheetRow label="Cashpower (kWh)" values={[report.cashpowerKwh == null ? '' : formatNumber(report.cashpowerKwh)]} />
+                <SheetRow label="Cashpower Purchase" values={[money(report.cashpowerPurchaseGmd)]} />
+              </SheetTable>
+
+              <SheetTable title="Cash Reconciliation" headers={['DESCRIPTION', 'AMOUNT (GMD)']}>
+                <SheetRow label="Sales" values={[money(report.totalFuelSalesGmd)]} />
+                <SheetRow label="Coupons" values={[money(report.couponsGmd)]} />
+                <SheetRow label="QMoney" values={[money(report.qmoneyGmd)]} />
+                <SheetRow label="Waychit" values={[money(report.waychitGmd)]} />
+                <SheetRow label="Cheques" values={[money(report.chequesGmd)]} />
+                <SheetRow label="Credit Sales" values={[money(report.creditSalesGmd)]} />
+                <SheetRow label="Cash" values={[money(report.cashGmd)]} />
+                <SheetRow label="Banked" values={[money(report.bankedGmd)]} strong />
+                <SheetRow label="Difference" values={[money(report.reconciliationDiffGmd)]} alert={(report.reconciliationDiffGmd ?? 0) < 0} />
+              </SheetTable>
+            </div>
+          </div>
+
+          <section className="mt-3 border-2 border-slate-900 bg-white">
+            <div className="border-b-2 border-slate-900 px-2 py-1 text-[11px] font-bold uppercase tracking-wide">Workbook Source Lineage & Audit Trail</div>
+            <div className="grid grid-cols-1 gap-2 p-2 text-[10px] sm:grid-cols-2 xl:grid-cols-4">
+              <div><div className="font-bold text-slate-500">DROPBOX SOURCE PATH</div><div className="break-all font-mono">{report.workbookPath || 'Not recorded'}</div></div>
+              <div><div className="font-bold text-slate-500">WORKSHEET / SOURCE ROW</div><div className="font-mono">{report.worksheetName || '—'} · {report.sourceRowRef || 'Daily sheet'}</div></div>
+              <div><div className="font-bold text-slate-500">WORKBOOK ID / REVISION</div><div className="break-all font-mono">{report.workbookId || '—'} · {report.workbookRevision || '—'}</div></div>
+              <div><div className="font-bold text-slate-500">REPORT STATUS / UPDATED</div><div className="font-mono">{report.completeness} · {report.updatedAt || report.createdAt || '—'}</div></div>
+            </div>
+            {report.noteText && <div className="border-t border-slate-700 px-2 py-1.5 text-[10px]"><span className="font-bold">SOURCE NOTES: </span>{report.noteText}</div>}
           </section>
-
-          {/* PMS vs AGO Sales */}
-          <section>
-            <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2">
-              Product Sales & Shifts
-            </h3>
-            <div className="border border-slate-200 rounded-md overflow-hidden">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                  <tr>
-                    <th className="text-left py-2 px-3 font-medium">Metric</th>
-                    <th className="text-right py-2 px-3 font-medium text-teal-800">PMS (Petrol)</th>
-                    <th className="text-right py-2 px-3 font-medium text-amber-800">AGO (Diesel)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 font-mono tabular-nums">
-                  <tr>
-                    <td className="py-2 px-3 font-sans text-slate-700">Morning Shift</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.pmsMorningLitres)}</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.agoMorningLitres)}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2 px-3 font-sans text-slate-700">Afternoon Shift</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.pmsAfternoonLitres)}</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.agoAfternoonLitres)}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2 px-3 font-sans text-slate-700">Night Shift</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.pmsNightLitres)}</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.agoNightLitres)}</td>
-                  </tr>
-                  <tr className="bg-slate-50/80 font-semibold">
-                    <td className="py-2 px-3 font-sans text-slate-900">Total Volume</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.pmsTotalLitres)}</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.agoTotalLitres)}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2 px-3 font-sans text-slate-700">Return to Tank</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.pmsReturnToTankLitres)}</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.agoReturnToTankLitres)}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2 px-3 font-sans text-slate-700">Sales Value</td>
-                    <td className="py-2 px-3 text-right">{formatGmd(report.pmsSalesGmd)}</td>
-                    <td className="py-2 px-3 text-right">{formatGmd(report.agoSalesGmd)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* Stock Control */}
-          <section>
-            <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2">
-              Stock Control
-            </h3>
-            <div className="border border-slate-200 rounded-md overflow-hidden">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                  <tr>
-                    <th className="text-left py-2 px-3 font-medium">Stock Position</th>
-                    <th className="text-right py-2 px-3 font-medium">PMS</th>
-                    <th className="text-right py-2 px-3 font-medium">AGO</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 font-mono tabular-nums">
-                  <tr>
-                    <td className="py-2 px-3 font-sans text-slate-700">Opening Stock</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.pmsOpeningStock)}</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.agoOpeningStock)}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2 px-3 font-sans text-slate-700">Receipts</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.pmsReceipts)}</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.agoReceipts)}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2 px-3 font-sans text-slate-700">Theoretical Stock</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.pmsTheoreticalStock)}</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.agoTheoreticalStock)}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2 px-3 font-sans text-slate-700">Closing Stock</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.pmsClosingStock)}</td>
-                    <td className="py-2 px-3 text-right">{formatLitres(report.agoClosingStock)}</td>
-                  </tr>
-                  <tr className="bg-slate-50/80">
-                    <td className="py-2 px-3 font-sans font-medium text-slate-900">Stock Difference / Control</td>
-                    <td className="py-2 px-3 text-right">
-                      {formatLitres(report.pmsStockDiff)} ({formatPercent(report.pmsStockControlRatio)})
-                    </td>
-                    <td className="py-2 px-3 text-right">
-                      {formatLitres(report.agoStockDiff)} ({formatPercent(report.agoStockControlRatio)})
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* Financial Reconciliation & Utilities */}
-          <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="border border-slate-200 rounded-md p-4">
-              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2.5">
-                Financial Settlement (GMD)
-              </h4>
-              <dl className="space-y-1.5 text-xs">
-                <div className="flex justify-between">
-                  <dt className="text-slate-600">Total Fuel Sales</dt>
-                  <dd className="font-mono tabular-nums font-semibold text-slate-900">
-                    {formatGmd(report.totalFuelSalesGmd)}
-                  </dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-600">Credit Sales</dt>
-                  <dd className="font-mono tabular-nums">{formatGmd(report.creditSalesGmd)}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-600">Qmoney / Waychit / Coupons</dt>
-                  <dd className="font-mono tabular-nums">
-                    {formatGmd(
-                      (report.qmoneyGmd ?? 0) + (report.waychitGmd ?? 0) + (report.couponsGmd ?? 0)
-                    )}
-                  </dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-600">Cash Expected</dt>
-                  <dd className="font-mono tabular-nums">{formatGmd(report.cashGmd)}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-600">Banked</dt>
-                  <dd className="font-mono tabular-nums">{formatGmd(report.bankedGmd)}</dd>
-                </div>
-                <div className="flex justify-between pt-1.5 border-t border-slate-200 font-semibold">
-                  <dt className="text-slate-900">Reconciliation Diff</dt>
-                  <dd
-                    className={`font-mono tabular-nums ${
-                      (report.reconciliationDiffGmd ?? 0) < -2500 ? 'text-amber-700' : 'text-slate-900'
-                    }`}
-                  >
-                    {formatGmd(report.reconciliationDiffGmd)}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-
-            <div className="border border-slate-200 rounded-md p-4">
-              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2.5">
-                Utilities & Notes
-              </h4>
-              <dl className="space-y-1.5 text-xs">
-                <div className="flex justify-between">
-                  <dt className="text-slate-600">Generator Runtime</dt>
-                  <dd className="font-mono tabular-nums">
-                    {report.generatorRuntimeHrs !== null ? `${report.generatorRuntimeHrs} hrs` : '—'}
-                  </dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-600">Generator Refuel</dt>
-                  <dd className="font-mono tabular-nums">{formatLitres(report.generatorRefuelLitres)}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-600">Cashpower (kWh)</dt>
-                  <dd className="font-mono tabular-nums">
-                    {report.cashpowerKwh !== null ? `${formatNumber(report.cashpowerKwh)} kWh` : '— (blank)'}
-                  </dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-slate-600">Cashpower Purchase</dt>
-                  <dd className="font-mono tabular-nums">{formatGmd(report.cashpowerPurchaseGmd)}</dd>
-                </div>
-              </dl>
-              <div className="mt-3 pt-2.5 border-t border-slate-200 text-xs text-slate-600">
-                <span className="font-medium text-slate-800 block mb-0.5">Station Notes</span>
-                <span>{report.noteText || 'No operational notes recorded on worksheet.'}</span>
-              </div>
-            </div>
-          </section>
-
-          {/* Pump Meter Readings */}
-          {report.pumpReadings.length > 0 && (
-            <section>
-              <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-2">
-                Pump Meter Readings
-              </h3>
-              <div className="border border-slate-200 rounded-md overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                    <tr>
-                      <th className="text-left py-2 px-3 font-medium">Pump / Island</th>
-                      <th className="text-left py-2 px-3 font-medium">Product</th>
-                      <th className="text-right py-2 px-3 font-medium">Opening</th>
-                      <th className="text-right py-2 px-3 font-medium">Closing</th>
-                      <th className="text-right py-2 px-3 font-medium">Throughput</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 font-mono tabular-nums">
-                    {report.pumpReadings.map((p) => (
-                      <tr key={p.pumpId}>
-                        <td className="py-2 px-3 font-sans text-slate-800">
-                          {p.pumpId} · {p.island}
-                        </td>
-                        <td className="py-2 px-3 font-sans">{p.product}</td>
-                        <td className="py-2 px-3 text-right">{formatNumber(p.openingMeter)}</td>
-                        <td className="py-2 px-3 text-right">{formatNumber(p.closingMeter)}</td>
-                        <td
-                          className={`py-2 px-3 text-right font-medium ${
-                            p.flag === 'negative_movement' ? 'text-red-700' : 'text-slate-900'
-                          }`}
-                        >
-                          {formatLitres(p.throughput)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-        </div>
+          <div className="pb-1 text-right text-[9px] text-slate-500">Displayed values are extracted report fields. Blank cells indicate that no value is available in the imported record.</div>
+        </main>
       </div>
     </div>
   );
