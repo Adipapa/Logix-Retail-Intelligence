@@ -797,13 +797,25 @@ def production_data_version(
     sync_state = db.scalar(
         select(DropboxSyncState).where(DropboxSyncState.state_key == "primary")
     )
+    station_count, station_max_id, max_pms_capacity, max_ago_capacity = db.execute(
+        select(
+            func.count(StationModel.id),
+            func.max(StationModel.id),
+            func.max(StationModel.pms_tank_capacity_litres),
+            func.max(StationModel.ago_tank_capacity_litres),
+        )
+    ).one()
+    max_dropbox_revision = db.scalar(select(func.max(DropboxFile.revision)))
+    max_source_revision = db.scalar(select(func.max(SourceWorkbook.revision)))
+    # Do not include last_sync_at: the scheduled Dropbox inventory runs every
+    # 15 minutes even when nothing changes. Including it would invalidate the
+    # browser cache on every routine scan.
     parts = (
         report_count, report_max_id, report_last_import,
-        workbook_count, workbook_max_id, workbook_last_import,
-        file_count, file_last_discovered, file_last_modified,
+        workbook_count, workbook_max_id, workbook_last_import, max_source_revision,
+        file_count, file_last_discovered, file_last_modified, max_dropbox_revision,
         job_count, job_max_id, job_last_completed,
-        sync_state.last_sync_at if sync_state else None,
-        sync_state.last_status if sync_state else "never",
+        station_count, station_max_id, max_pms_capacity, max_ago_capacity,
     )
     version = "|".join(str(value.isoformat() if hasattr(value, "isoformat") else value or "") for value in parts)
     return {
