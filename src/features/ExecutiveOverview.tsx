@@ -279,10 +279,14 @@ export function ExecutiveOverview({ reports, allReports }: ExecutiveOverviewProp
     return { currentYear, previousYear, data: MONTH_NAMES.map((label, index) => ({ label, pmsValue: previous[index], agoValue: current[index] })) };
   }, [historical, yearly, fuelMode]);
 
-  const yearlyGrowth = useMemo(() => yearly.map((item, index) => ({
-    label: String(item.year),
-    value: index > 0 && yearly[index - 1].revenue > 0 ? ((item.revenue - yearly[index - 1].revenue) / yearly[index - 1].revenue) * 100 : 0,
-  })), [yearly]);
+  const yearlyGrowth = useMemo(() => yearly.slice(1).map((item) => {
+    const comparableMonth = Math.max(1, ...historical.filter((r) => r.year === item.year).map((r) => r.month));
+    const currentRevenue = historical.filter((r) => r.year === item.year && r.month <= comparableMonth)
+      .reduce((sum, r) => sum + (fuelMode === 'ago' ? 0 : positive(r.pmsSalesGmd)) + (fuelMode === 'pms' ? 0 : positive(r.agoSalesGmd)), 0);
+    const previousRevenue = historical.filter((r) => r.year === item.year - 1 && r.month <= comparableMonth)
+      .reduce((sum, r) => sum + (fuelMode === 'ago' ? 0 : positive(r.pmsSalesGmd)) + (fuelMode === 'pms' ? 0 : positive(r.agoSalesGmd)), 0);
+    return { label: String(item.year), value: previousRevenue > 0 ? ((currentRevenue - previousRevenue) / previousRevenue) * 100 : 0 };
+  }), [yearly, historical, fuelMode]);
 
   const forecast = useMemo(() => {
     const monthTotals = new Map<string, number>();
@@ -290,7 +294,11 @@ export function ExecutiveOverview({ reports, allReports }: ExecutiveOverviewProp
       const key = `${report.year}-${String(report.month).padStart(2, '0')}`;
       monthTotals.set(key, (monthTotals.get(key) ?? 0) + (fuelMode === 'ago' ? 0 : positive(report.pmsSalesGmd)) + (fuelMode === 'pms' ? 0 : positive(report.agoSalesGmd)));
     }
-    const actual = Array.from(monthTotals.entries()).sort(([a], [b]) => a.localeCompare(b)).slice(-12);
+    const orderedMonths = Array.from(monthTotals.entries()).sort(([a], [b]) => a.localeCompare(b));
+    const now = new Date();
+    const latest = orderedMonths[orderedMonths.length - 1];
+    const completedMonths = latest && latest[0] === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}` ? orderedMonths.slice(0, -1) : orderedMonths;
+    const actual = completedMonths.slice(-12);
     if (!actual.length) return [];
     const lastThree = actual.slice(-3).map(([, value]) => value);
     const average = lastThree.reduce((sum, value) => sum + value, 0) / lastThree.length;
@@ -365,12 +373,12 @@ export function ExecutiveOverview({ reports, allReports }: ExecutiveOverviewProp
           {yearComparison.data.length ? <TwoSeriesBars items={yearComparison.data.map((item) => ({ label: item.label, first: item.pmsValue, second: item.agoValue }))} firstLabel={String(yearComparison.previousYear)} secondLabel={String(yearComparison.currentYear)} /> : <div className="py-12 text-center text-xs text-slate-500">Not enough historical years to compare.</div>}
           {yearComparison.data.length > 0 && <div className="mt-2 flex flex-wrap gap-4 text-[11px] text-slate-500"><span>Previous year: ${yearComparison.previousYear}</span><span>Latest year: ${yearComparison.currentYear}</span></div>}
         </Panel>
-        <Panel title="Annual revenue growth" subtitle="Year-over-year change in recorded PMS and AGO revenue.">
+        <Panel title="Annual revenue growth" subtitle="Year-over-year revenue change against the same months in the previous year (like-for-like period).">
           <GrowthBars items={yearlyGrowth} />
           {revenueGrowth !== null && <p className="mt-3 text-xs text-slate-600">Latest annual change: <span className={revenueGrowth >= 0 ? 'font-semibold text-emerald-700' : 'font-semibold text-rose-700'}>{revenueGrowth >= 0 ? '+' : ''}{revenueGrowth.toFixed(1)}%</span></p>}
         </Panel>
-        <Panel title="Annual sales volume" subtitle="Total PMS and AGO litres recorded in each calendar year."><SimpleBars items={yearly.map((item) => ({ label: String(item.year), value: item.pms + item.ago }))} valueFormat="litres" color="bg-teal-700" /></Panel>
-        <Panel title="Revenue outlook · next 3 months" subtitle="Estimate based on the average of the latest three available monthly revenue totals; not a guaranteed forecast.">
+        <Panel title="Annual sales volume" subtitle="Total recorded PMS and AGO litres by calendar year; the latest year may be partial."><SimpleBars items={yearly.map((item) => ({ label: String(item.year), value: item.pms + item.ago }))} valueFormat="litres" color="bg-teal-700" /></Panel>
+        <Panel title="Revenue outlook · next 3 months" subtitle="Estimate based on the average of the latest three completed monthly revenue totals; not a guaranteed forecast.">
           <div className="space-y-3">
             <div className="flex flex-wrap gap-4 text-[10px] text-slate-500"><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-slate-700" /> Actual</span><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm border border-dashed border-indigo-700 bg-indigo-100" /> Estimate</span></div>
             {forecast.length ? <div className="space-y-3">{forecast.map((item) => {
