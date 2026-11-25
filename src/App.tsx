@@ -454,7 +454,12 @@ export default function App() {
     setLoadingProductionData(true);
     try {
       const version = await apiProductionVersion();
-      const cached = await readProductionCache(userProfile.uid);
+      let cached: Awaited<ReturnType<typeof readProductionCache>> = null;
+      try {
+        cached = await readProductionCache(userProfile.uid);
+      } catch {
+        // Continue with a live refresh if this browser blocks IndexedDB.
+      }
       if (cached && cached.version === version.version) {
         // A sync can update its scan timestamp without changing any workbook.
         // Refresh only the monitor status in that case.
