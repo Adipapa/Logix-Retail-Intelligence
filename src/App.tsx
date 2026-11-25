@@ -311,12 +311,12 @@ export default function App() {
     setReconciliationPage(1);
   }, [filters.year, filters.month, filters.stationId]);
 
+  // Prefetch the first reconciliation page during startup so the section is
+  // ready when management opens it.
   useEffect(() => {
-    if (!isAuthenticated || activeRoute !== 'reconciliation') {
-      if (!isAuthenticated) {
-        setProductionReconciliations(null);
-        setProductionReconciliationError(null);
-      }
+    if (!isAuthenticated) {
+      setProductionReconciliations(null);
+      setProductionReconciliationError(null);
       return;
     }
     let active = true;
@@ -335,7 +335,7 @@ export default function App() {
       if (active) setProductionReconciliationError(err instanceof Error ? err.message : 'Unable to load production reconciliations.');
     });
     return () => { active = false; };
-  }, [isAuthenticated, activeRoute, filters.year, filters.month, filters.stationId, reconciliationPage]);
+  }, [isAuthenticated, filters.year, filters.month, filters.stationId, reconciliationPage]);
 
   const years = productionMetadata?.years ?? [];
 
@@ -596,9 +596,9 @@ export default function App() {
           </div>
         )}
 
-        {loadingProductionData && reportRoutes.includes(activeRoute) && (
+        {loadingProductionData && (
           <div className="mb-4 p-3 bg-white border border-slate-200 rounded-md text-xs text-slate-600">
-            Loading detailed production reports…
+            Preparing reporting data…
           </div>
         )}
 
