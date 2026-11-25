@@ -282,3 +282,47 @@ export function ShiftSplitBars({
     </div>
   );
 }
+
+
+export interface StationVolumeDatum {
+  stationName: string;
+  pmsLitres: number;
+  agoLitres: number;
+  reportCount: number;
+}
+
+export function StationVolumeComparisonChart({ items }: { items: StationVolumeDatum[] }) {
+  const maxVolume = Math.max(1, ...items.map((item) => item.pmsLitres + item.agoLitres));
+  if (!items.length) {
+    return <div className="rounded-md border border-dashed border-slate-200 px-4 py-10 text-center text-xs text-slate-500">
+      No completed volume records match these filters.
+    </div>;
+  }
+  return <div className="space-y-4">
+    <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-600">
+      <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-teal-700" /> PMS (Petrol)</span>
+      <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-amber-600" /> AGO (Diesel)</span>
+    </div>
+    {items.map((item) => {
+      const total = item.pmsLitres + item.agoLitres;
+      const pmsWidth = (item.pmsLitres / maxVolume) * 100;
+      const agoWidth = (item.agoLitres / maxVolume) * 100;
+      return <div key={item.stationName} className="space-y-1.5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs">
+          <span className="font-semibold text-slate-800">{item.stationName}
+            <span className="ml-2 font-normal text-slate-400">{formatNumber(item.reportCount)} reports</span>
+          </span>
+          <span className="font-mono font-semibold tabular-nums text-slate-900">{formatLitres(total)}</span>
+        </div>
+        <div className="flex h-3.5 w-full overflow-hidden rounded-sm bg-slate-100" title={`PMS ${formatLitres(item.pmsLitres)} · AGO ${formatLitres(item.agoLitres)}`}>
+          <div className="h-full bg-teal-700" style={{ width: `${pmsWidth}%` }} />
+          <div className="h-full bg-amber-600" style={{ width: `${agoWidth}%` }} />
+        </div>
+        <div className="flex justify-between gap-2 text-[10px] font-mono tabular-nums text-slate-500">
+          <span>PMS {formatLitres(item.pmsLitres)}</span>
+          <span>AGO {formatLitres(item.agoLitres)}</span>
+        </div>
+      </div>;
+    })}
+  </div>;
+}
