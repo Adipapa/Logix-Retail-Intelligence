@@ -332,6 +332,58 @@ export default function App() {
     return () => { active = false; };
   }, [isAuthenticated, userProfile.uid]);
 
+  // Check the small version marker periodically while the workspace is open.
+  // The server's Dropbox scanner runs every 15 minutes; this poll notices an
+  // imported change without repeatedly downloading unchanged report data.
+  useEffect(() => {
+    if (!isAuthenticated || !userProfile.uid) return;
+    let active = true;
+    let checking = false;
+    const checkForProductionUpdates = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const [cached, current] = await Promise.all([
+          readProductionCache(userProfile.uid),
+          apiProductionVersion(),
+        ]);
+        if (!active || !cached || cached.version === current.version) return;
+        setLoadingProductionData(true);
+        const [reports, metadata, monitor] = await Promise.all([
+          apiProductionReports({}),
+          apiProductionMetadata(),
+          apiProductionMonitor(),
+        ]);
+        if (!active) return;
+        setProductionData(reports);
+        setProductionMetadata(metadata);
+        setProductionMonitor(monitor);
+        setLoadedReportFilterKey('ALL_REPORTS');
+        setProductionDataError(null);
+        await writeProductionCache(userProfile.uid, {
+          version: current.version,
+          savedAt: new Date().toISOString(),
+          reports,
+          metadata,
+          monitor,
+        });
+        setAuthNotice('New production data detected and refreshed.');
+      } catch {
+        // Keep the last known good cache when a background check fails.
+      } finally {
+        checking = false;
+        if (active) setLoadingProductionData(false);
+      }
+    };
+    const intervalId = window.setInterval(() => {
+      void checkForProductionUpdates();
+    }, 5 * 60 * 1000);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [isAuthenticated, userProfile.uid]);
+
   useEffect(() => {
     setReconciliationPage(1);
   }, [filters.year, filters.month, filters.stationId]);
