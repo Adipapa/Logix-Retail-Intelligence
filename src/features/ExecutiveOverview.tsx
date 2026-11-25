@@ -1,13 +1,46 @@
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowUpRight } from 'lucide-react';
-import { FuelComparisonChart, ShiftSplitBars } from '../components/Charts';
+import { FuelComparisonChart, ShiftSplitBars, StationVolumeComparisonChart } from '../components/Charts';
 import { formatGmd, formatLitres, formatNumber } from '../lib/formatters';
 import type { LiveAnalyticsOverview } from '../services/api';
+import type { DailyReport } from '../types/logix';
 import type { RouteId } from '../types/logix';
+
+
+type PeriodMode = 'daily' | 'weekly' | 'monthly';
+type ShiftMode = 'all' | 'morning' | 'afternoon' | 'night';
+
+function isoWeekKey(dateValue: string): string {
+  const date = new Date(`${dateValue}T00:00:00Z`);
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+function periodKey(dateValue: string, mode: PeriodMode): string {
+  if (mode === 'daily') return dateValue;
+  if (mode === 'weekly') return isoWeekKey(dateValue);
+  return dateValue.slice(0, 7);
+}
+
+function periodTitle(key: string, mode: PeriodMode): string {
+  if (mode === 'daily') return key;
+  if (mode === 'weekly') return `Week ${key.slice(-2)}, ${key.slice(0, 4)}`;
+  const [year, month] = key.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
+function numeric(value: number | null | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+}
 
 interface ExecutiveOverviewProps {
   onNavigate: (route: RouteId) => void;
   liveAnalytics?: LiveAnalyticsOverview | null;
   liveAnalyticsError?: string | null;
+  reports: DailyReport[];
 }
 
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
@@ -18,7 +51,52 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
   </div>;
 }
 
-export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigate }: ExecutiveOverviewProps) {
+export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigate, reports }: ExecutiveOverviewProps) {
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('monthly');
+  const [selectedPeriod, setSelectedPeriod] = useState('');
+  const [shiftMode, setShiftMode] = useState<ShiftMode>('all');
+
+  const periodOptions = useMemo(() => {
+    const keys = Array.from(new Set(reports.map((report) => periodKey(report.reportDate, periodMode))))
+      .filter(Boolean)
+      .sort((a, b) => b.localeCompare(a));
+    return keys;
+  }, [reports, periodMode]);
+
+  const activePeriod = periodOptions.includes(selectedPeriod) ? selectedPeriod : (periodOptions[0] ?? '');
+
+  useEffect(() => {
+    if (activePeriod && selectedPeriod !== activePeriod) setSelectedPeriod(activePeriod);
+  }, [activePeriod, selectedPeriod]);
+
+  const stationVolumeItems = useMemo(() => {
+    const totals = new Map<string, { stationName: string; pmsLitres: number; agoLitres: number; reportCount: number }>();
+    for (const report of reports) {
+      if (!activePeriod || periodKey(report.reportDate, periodMode) !== activePeriod) continue;
+      // Exclude anomalous/incomplete totals. Only valid positive shift or daily
+      // volumes contribute to this comparison.
+      const pms = shiftMode === 'morning' ? numeric(report.pmsMorningLitres)
+        : shiftMode === 'afternoon' ? numeric(report.pmsAfternoonLitres)
+        : shiftMode === 'night' ? numeric(report.pmsNightLitres)
+        : numeric(report.pmsTotalLitres);
+      const ago = shiftMode === 'morning' ? numeric(report.agoMorningLitres)
+        : shiftMode === 'afternoon' ? numeric(report.agoAfternoonLitres)
+        : shiftMode === 'night' ? numeric(report.agoNightLitres)
+        : numeric(report.agoTotalLitres);
+      if (pms === 0 && ago === 0) continue;
+      const stationName = (report.stationName || 'Unresolved station').trim();
+      const key = stationName.toLocaleLowerCase();
+      const item = totals.get(key) ?? { stationName, pmsLitres: 0, agoLitres: 0, reportCount: 0 };
+      item.pmsLitres += pms;
+      item.agoLitres += ago;
+      item.reportCount += 1;
+      totals.set(key, item);
+    }
+    return Array.from(totals.values())
+      .sort((a, b) => (b.pmsLitres + b.agoLitres) - (a.pmsLitres + a.agoLitres));
+  }, [reports, activePeriod, periodMode, shiftMode]);
+
+  const selectedTotal = stationVolumeItems.reduce((sum, item) => sum + item.pmsLitres + item.agoLitres, 0);
   const latestDate = liveAnalytics?.recent_reports?.[0]?.report_date ?? 'Not available';
   const dataReady = Boolean(liveAnalytics);
   return <div className="space-y-5">
@@ -80,6 +158,43 @@ export function ExecutiveOverview({ liveAnalytics, liveAnalyticsError, onNavigat
         <p className="text-[11px] text-slate-500">
           Coupon customer rankings are not shown because the supported workbook layouts currently provide coupon totals, not named coupon transactions.
         </p>
+
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-950">Station volume sales comparison</h2>
+              <p className="mt-1 text-xs text-slate-500">PMS and AGO litres by station for the selected reporting period and shift.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="flex flex-col gap-1 text-[11px] font-medium text-slate-600">
+                Period
+                <select value={periodMode} onChange={(event) => { setPeriodMode(event.target.value as PeriodMode); setSelectedPeriod(''); }} className="min-w-32 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-blue-500">
+                  <option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-[11px] font-medium text-slate-600">
+                {periodMode === 'daily' ? 'Report date' : periodMode === 'weekly' ? 'Reporting week' : 'Reporting month'}
+                <select value={activePeriod} onChange={(event) => setSelectedPeriod(event.target.value)} disabled={!periodOptions.length} className="min-w-36 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-blue-500 disabled:bg-slate-50">
+                  {periodOptions.map((key) => <option key={key} value={key}>{periodTitle(key, periodMode)}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-[11px] font-medium text-slate-600">
+                Shift
+                <select value={shiftMode} onChange={(event) => setShiftMode(event.target.value as ShiftMode)} className="min-w-32 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-blue-500">
+                  <option value="all">All shifts</option><option value="morning">Morning</option><option value="afternoon">Afternoon</option><option value="night">Night</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-y border-slate-100 py-3 text-xs">
+            <span className="font-medium text-slate-700">{activePeriod ? periodTitle(activePeriod, periodMode) : 'No reporting period available'} · {shiftMode === 'all' ? 'All shifts' : `${shiftMode[0].toUpperCase()}${shiftMode.slice(1)} shift`}</span>
+            <span className="font-mono tabular-nums text-slate-600">{formatLitres(selectedTotal)} total · {stationVolumeItems.length} stations</span>
+          </div>
+          <div className="mt-5">
+            <StationVolumeComparisonChart items={stationVolumeItems} />
+          </div>
+          <p className="mt-3 text-[10px] text-slate-400">Volumes are summed from imported daily reports. Missing shift entries are not treated as sales; records with no positive volume are omitted.</p>
+        </section>
 
         <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
