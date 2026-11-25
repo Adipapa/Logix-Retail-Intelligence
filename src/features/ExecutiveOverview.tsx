@@ -44,11 +44,16 @@ function positive(value: number | null | undefined): number {
 }
 
 function shiftValue(report: DailyReport, product: 'pms' | 'ago', shift: ShiftMode): number {
-  const prefix = product === 'pms' ? 'pms' : 'ago';
-  if (shift === 'morning') return positive(report[`${prefix}MorningLitres`]);
-  if (shift === 'afternoon') return positive(report[`${prefix}AfternoonLitres`]);
-  if (shift === 'night') return positive(report[`${prefix}NightLitres`]);
-  return positive(report[`${prefix}TotalLitres`]);
+  if (product === 'pms') {
+    if (shift === 'morning') return positive(report.pmsMorningLitres);
+    if (shift === 'afternoon') return positive(report.pmsAfternoonLitres);
+    if (shift === 'night') return positive(report.pmsNightLitres);
+    return positive(report.pmsTotalLitres);
+  }
+  if (shift === 'morning') return positive(report.agoMorningLitres);
+  if (shift === 'afternoon') return positive(report.agoAfternoonLitres);
+  if (shift === 'night') return positive(report.agoNightLitres);
+  return positive(report.agoTotalLitres);
 }
 
 export function ExecutiveOverview({ reports }: ExecutiveOverviewProps) {
@@ -164,7 +169,7 @@ export function ExecutiveOverview({ reports }: ExecutiveOverviewProps) {
       </div>
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-950">Sales revenue trend</h2>
-        <p className="mt-1 text-xs text-slate-500">Recorded PMS and AGO sales revenue by reporting {periodMode}</p>
+        <p className="mt-1 text-xs text-slate-500">Recorded daily PMS and AGO sales revenue by reporting {periodMode}; shift filter applies to volume charts</p>
         <div className="mt-4"><FuelComparisonChart data={revenueTrend} unit="GMD" showPms={fuelMode !== 'ago'} showAgo={fuelMode !== 'pms'} height={260} /></div>
       </div>
     </section>
