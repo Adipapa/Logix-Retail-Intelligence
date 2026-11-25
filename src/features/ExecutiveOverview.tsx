@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState, type ReactNode } from 'react';
 import { FuelComparisonChart, ShiftSplitBars, StationVolumeComparisonChart } from '../components/Charts';
 import { formatGmd, formatLitres, formatNumber } from '../lib/formatters';
 import type { DailyReport, RouteId } from '../types/logix';
@@ -64,7 +64,7 @@ function weekdayIndex(report: DailyReport): number {
   return (day + 6) % 7;
 }
 
-function Panel({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+function Panel({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
   return <section className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
     <div className="mb-4">
       <h3 className="text-sm font-semibold text-slate-950">{title}</h3>
@@ -113,7 +113,7 @@ function Heatmap({ rows, columns, values, format = 'litres' }: {
       <div className="grid gap-1" style={{ gridTemplateColumns: `minmax(92px,1.2fr) repeat(${columns.length}, minmax(34px,1fr))` }}>
         <div />
         {columns.map((column) => <div key={column} className="pb-1 text-center text-[10px] font-medium text-slate-500">{column}</div>)}
-        {rows.map((row, rowIndex) => <React.Fragment key={row}>
+        {rows.map((row, rowIndex) => <Fragment key={row}>
           <div className="flex items-center truncate pr-2 text-[11px] text-slate-600" title={row}>{row}</div>
           {columns.map((column, columnIndex) => {
             const value = values[rowIndex]?.[columnIndex] ?? 0;
@@ -124,7 +124,7 @@ function Heatmap({ rows, columns, values, format = 'litres' }: {
               {value > 0 ? (value >= 100000 ? `${(value / 1000).toFixed(0)}k` : value >= 1000 ? `${(value / 1000).toFixed(1)}k` : Math.round(value)) : '—'}
             </div>;
           })}
-        </React.Fragment>)}
+        </Fragment>)}
       </div>
     </div>
   </div>;
