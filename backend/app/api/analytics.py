@@ -758,6 +758,61 @@ def production_reconciliations(
     }
 
 
+
+@router.get("/version")
+def production_data_version(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    # Small aggregate-only check: avoids transferring the full report dataset
+    # when the database has not changed since this browser's last cache.
+    report_count, report_max_id, report_last_import = db.execute(
+        select(
+            func.count(DailyReport.id),
+            func.max(DailyReport.id),
+            func.max(DailyReport.imported_at),
+        )
+    ).one()
+    workbook_count, workbook_max_id, workbook_last_import = db.execute(
+        select(
+            func.count(SourceWorkbook.id),
+            func.max(SourceWorkbook.id),
+            func.max(SourceWorkbook.imported_at),
+        )
+    ).one()
+    file_count, file_last_discovered, file_last_modified = db.execute(
+        select(
+            func.count(DropboxFile.id),
+            func.max(DropboxFile.discovered_at),
+            func.max(DropboxFile.modified_at),
+        )
+    ).one()
+    job_count, job_max_id, job_last_completed = db.execute(
+        select(
+            func.count(ImportJob.id),
+            func.max(ImportJob.id),
+            func.max(ImportJob.completed_at),
+        )
+    ).one()
+    sync_state = db.scalar(
+        select(DropboxSyncState).where(DropboxSyncState.state_key == "primary")
+    )
+    parts = (
+        report_count, report_max_id, report_last_import,
+        workbook_count, workbook_max_id, workbook_last_import,
+        file_count, file_last_discovered, file_last_modified,
+        job_count, job_max_id, job_last_completed,
+        sync_state.last_sync_at if sync_state else None,
+        sync_state.last_status if sync_state else "never",
+    )
+    version = "|".join(str(value.isoformat() if hasattr(value, "isoformat") else value or "") for value in parts)
+    return {
+        "version": version,
+        "report_count": report_count,
+        "last_dropbox_scan_at": sync_state.last_sync_at.isoformat() if sync_state and sync_state.last_sync_at else None,
+        "last_dropbox_scan_status": sync_state.last_status if sync_state else "never",
+    }
+
 @router.get("/reports")
 def production_reports(
     year: int | None = Query(default=None, ge=2000, le=2100),
