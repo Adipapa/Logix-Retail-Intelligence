@@ -723,6 +723,7 @@ export default function App() {
             liveAnalytics={liveAnalytics}
             liveAnalyticsError={liveAnalyticsError}
             reports={filteredReports}
+            allReports={productionData?.reports ?? []}
           />
         )}
 
