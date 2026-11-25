@@ -398,6 +398,32 @@ export default function App() {
     });
   }, [productionReconciliations, filters]);
 
+  const refreshProductionSnapshot = async () => {
+    setLoadingProductionData(true);
+    try {
+      const [version, reports, metadata, monitor] = await Promise.all([
+        apiProductionVersion(),
+        apiProductionReports({}),
+        apiProductionMetadata(),
+        apiProductionMonitor(),
+      ]);
+      setProductionData(reports);
+      setProductionMetadata(metadata);
+      setProductionMonitor(monitor);
+      setLoadedReportFilterKey('ALL_REPORTS');
+      setProductionDataError(null);
+      await writeProductionCache(userProfile.uid, {
+        version: version.version,
+        savedAt: new Date().toISOString(),
+        reports,
+        metadata,
+        monitor,
+      });
+    } finally {
+      setLoadingProductionData(false);
+    }
+  };
+
   const handleTriggerManualSync = async () => {
     if (!isAuthenticated) {
       setAuthNotice('Sign in with a central management administrator account to run Dropbox sync.');
@@ -405,17 +431,15 @@ export default function App() {
     }
     try {
       const result = await apiDropboxSync();
-      setLoadedReportFilterKey(null);
+      await refreshProductionSnapshot();
       setAuthNotice(`Dropbox sync completed: ${result.files_seen} files checked; ${result.new_or_changed} new or revised; ${result.tracked_workbooks} tracked. Extraction attempted: ${result.imports_attempted ?? 0}; succeeded: ${result.imports_succeeded ?? 0}; failed: ${result.imports_failed ?? 0}.`);
       const requestFilters = { year: filters.year, month: filters.month, station: filters.stationId === 'ALL' ? undefined : filters.stationId };
-      setProductionMetadata(await apiProductionMetadata());
       try {
         setLiveAnalytics(await apiAnalyticsOverview(requestFilters));
         setLiveAnalyticsError(null);
       } catch (analyticsError) {
         setLiveAnalyticsError(analyticsError instanceof Error ? analyticsError.message : 'Unable to refresh executive analytics.');
       }
-      if (activeRoute === 'data-monitor') setProductionMonitor(await apiProductionMonitor());
     } catch (err) {
       setAuthNotice(err instanceof Error ? err.message : 'Dropbox sync failed.');
     }
@@ -424,19 +448,17 @@ export default function App() {
   const handleReprocessLegacy2022 = async () => {
     try {
       const result = await apiReprocessLegacy2022();
-      setLoadedReportFilterKey(null);
+      await refreshProductionSnapshot();
       const summary = `2022 Kotu reprocessing: ${result.workbooks_succeeded}/${result.workbooks_attempted} workbooks succeeded; ${result.workbooks_failed} failed.`;
       setAuthNotice(summary);
       const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
       const requestFilters = { year: filters.year, month: filters.month, station: stationName };
-      setProductionMetadata(await apiProductionMetadata());
       try {
         setLiveAnalytics(await apiAnalyticsOverview(requestFilters));
         setLiveAnalyticsError(null);
       } catch (err) {
         setLiveAnalyticsError(err instanceof Error ? err.message : 'Unable to refresh executive analytics.');
       }
-      setProductionMonitor(await apiProductionMonitor());
     } catch (err) {
       setAuthNotice(err instanceof Error ? err.message : 'Legacy 2022 workbook reprocessing failed.');
     }
