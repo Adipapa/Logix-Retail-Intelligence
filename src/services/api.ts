@@ -311,3 +311,22 @@ export async function apiReprocessLegacy2022(): Promise<{
   if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Legacy workbook reprocessing failed.");
   return response.json();
 }
+
+
+export interface ProductionDataVersion {
+  version: string;
+  report_count: number;
+  last_dropbox_scan_at: string | null;
+  last_dropbox_scan_status: string;
+}
+
+export async function apiProductionVersion(): Promise<ProductionDataVersion> {
+  const token = localStorage.getItem("logix_api_token");
+  if (!token) throw new Error("Sign in to check production data version.");
+  const response = await fetch(`${API_BASE}/api/v1/analytics/version`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Unable to check production data version.");
+  return response.json();
+}
