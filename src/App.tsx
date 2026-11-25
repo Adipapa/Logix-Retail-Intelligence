@@ -412,13 +412,17 @@ export default function App() {
       setProductionMonitor(monitor);
       setLoadedReportFilterKey('ALL_REPORTS');
       setProductionDataError(null);
-      await writeProductionCache(userProfile.uid, {
-        version: version.version,
-        savedAt: new Date().toISOString(),
-        reports,
-        metadata,
-        monitor,
-      });
+      try {
+        await writeProductionCache(userProfile.uid, {
+          version: version.version,
+          savedAt: new Date().toISOString(),
+          reports,
+          metadata,
+          monitor,
+        });
+      } catch {
+        setAuthNotice('Data refreshed, but this browser could not save the local cache.');
+      }
     } finally {
       setLoadingProductionData(false);
     }
