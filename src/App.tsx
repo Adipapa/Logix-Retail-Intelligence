@@ -24,8 +24,9 @@ import {
   type WorkspaceData,
 } from './services/workspaceRepository';
 import { buildHistoricalSeedDataset } from './services/seedData';
-import { apiLogin, apiMe, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionMetadata, apiUpdateStationTankCapacities, apiProductionReports, apiProductionMonitor, apiProductionReconciliations, apiReprocessLegacy2022, type LiveAnalyticsOverview, type ProductionMetadataResponse, type ProductionReportsResponse, type ProductionMonitorResponse, type ProductionReconciliationResponse } from './services/api';
+import { apiLogin, apiMe, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionMetadata, apiUpdateStationTankCapacities, apiProductionReports, apiProductionMonitor, apiProductionReconciliations, apiReprocessLegacy2022, apiProductionVersion, type LiveAnalyticsOverview, type ProductionMetadataResponse, type ProductionReportsResponse, type ProductionMonitorResponse, type ProductionReconciliationResponse } from './services/api';
 import { parseExcelWorkbook } from './services/workbookEngine';
+import { readProductionCache, writeProductionCache } from './services/productionCache';
 import type {
   DailyReport,
   GlobalFilters,
@@ -242,13 +243,7 @@ export default function App() {
     const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
     const requestFilters = { year: filters.year, month: filters.month, station: stationName };
 
-    // Dashboard startup loads compact filter metadata and server-side KPIs only.
-    // Full report JSON is deferred until the user opens a report-heavy section.
-    apiProductionMetadata()
-      .then((metadata) => { if (active) setProductionMetadata(metadata); })
-      .catch((err) => {
-        if (active) setProductionDataError(err instanceof Error ? err.message : 'Unable to load production metadata.');
-      });
+    // Metadata is loaded through the cache-first snapshot loader below.
     apiAnalyticsOverview(requestFilters)
       .then((analytics) => {
         if (active) {
@@ -267,45 +262,75 @@ export default function App() {
     'deliveries', 'reconciliation', 'historical', 'reports',
   ];
 
-  // Preload the complete report dataset after authentication so every reporting
-  // section is populated immediately, including after a browser refresh.
+  // Cache-first startup: render the saved snapshot immediately, then ask the
+  // API for a lightweight version marker. Full data is fetched only on a cache
+  // miss or when the database version differs from the saved snapshot.
   useEffect(() => {
-    if (!isAuthenticated) return;
-    const filterKey = 'ALL_REPORTS';
-    if (loadedReportFilterKey === filterKey && productionData !== null) return;
+    if (!isAuthenticated || !userProfile.uid) return;
     let active = true;
-    setLoadingProductionData(true);
-    setProductionDataError(null);
-    apiProductionReports({})
-      .then((production) => {
-        if (active) {
-          setProductionData(production);
-          setLoadedReportFilterKey(filterKey);
-          setProductionDataError(null);
+    const loadSnapshot = async () => {
+      setLoadingProductionData(true);
+      setProductionDataError(null);
+      let cached: Awaited<ReturnType<typeof readProductionCache>> = null;
+      try {
+        cached = await readProductionCache(userProfile.uid);
+        if (active && cached) {
+          setProductionData(cached.reports);
+          setProductionMetadata(cached.metadata);
+          setProductionMonitor(cached.monitor);
+          setLoadedReportFilterKey('ALL_REPORTS');
+          setLoadingProductionData(false);
         }
-      })
-      .catch((err) => {
-        if (active) setProductionDataError(err instanceof Error ? err.message : 'Unable to load production reports.');
-      })
-      .finally(() => {
-        if (active) setLoadingProductionData(false);
-      });
-    return () => { active = false; };
-  }, [isAuthenticated, loadedReportFilterKey, productionData]);
+      } catch {
+        // IndexedDB may be disabled by browser policy; continue with live data.
+      }
 
-  // Load workbook and import status at startup so station and monitoring
-  // sections do not appear empty when first opened.
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setProductionMonitor(null);
-      return;
-    }
-    let active = true;
-    apiProductionMonitor()
-      .then((monitor) => { if (active) setProductionMonitor(monitor); })
-      .catch(() => { if (active) setProductionMonitor(null); });
+      try {
+        const current = await apiProductionVersion();
+        if (!active) return;
+        if (cached && cached.version === current.version) {
+          setLoadingProductionData(false);
+          setProductionDataError(null);
+          return;
+        }
+
+        setLoadingProductionData(true);
+        const [reports, metadata, monitor] = await Promise.all([
+          apiProductionReports({}),
+          apiProductionMetadata(),
+          apiProductionMonitor(),
+        ]);
+        if (!active) return;
+        setProductionData(reports);
+        setProductionMetadata(metadata);
+        setProductionMonitor(monitor);
+        setLoadedReportFilterKey('ALL_REPORTS');
+        setProductionDataError(null);
+        try {
+          await writeProductionCache(userProfile.uid, {
+            version: current.version,
+            savedAt: new Date().toISOString(),
+            reports,
+            metadata,
+            monitor,
+          });
+        } catch {
+          setAuthNotice('Data loaded, but this browser could not save the local production cache.');
+        }
+      } catch (err) {
+        if (!active) return;
+        if (!cached) {
+          setProductionDataError(err instanceof Error ? err.message : 'Unable to load production data.');
+        } else {
+          setAuthNotice('Showing saved production data. The live version check failed, so the cache may be out of date.');
+        }
+      } finally {
+        if (active) setLoadingProductionData(false);
+      }
+    };
+    void loadSnapshot();
     return () => { active = false; };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, userProfile.uid]);
 
   useEffect(() => {
     setReconciliationPage(1);
