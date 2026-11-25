@@ -24,7 +24,7 @@ import {
   type WorkspaceData,
 } from './services/workspaceRepository';
 import { buildHistoricalSeedDataset } from './services/seedData';
-import { apiLogin, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionMetadata, apiUpdateStationTankCapacities, apiProductionReports, apiProductionMonitor, apiProductionReconciliations, apiReprocessLegacy2022, type LiveAnalyticsOverview, type ProductionMetadataResponse, type ProductionReportsResponse, type ProductionMonitorResponse, type ProductionReconciliationResponse } from './services/api';
+import { apiLogin, apiMe, apiLogout, apiDropboxSync, apiAnalyticsOverview, apiProductionMetadata, apiUpdateStationTankCapacities, apiProductionReports, apiProductionMonitor, apiProductionReconciliations, apiReprocessLegacy2022, type LiveAnalyticsOverview, type ProductionMetadataResponse, type ProductionReportsResponse, type ProductionMonitorResponse, type ProductionReconciliationResponse } from './services/api';
 import { parseExcelWorkbook } from './services/workbookEngine';
 import type {
   DailyReport,
@@ -160,9 +160,28 @@ export default function App() {
     }
   }, []);
 
+  // Restore the saved API session on refresh instead of deleting it.
   useEffect(() => {
-    apiLogout();
-    setAuthReady(true);
+    let active = true;
+    apiMe()
+      .then((apiUser) => {
+        if (!active || !apiUser) return;
+        setUserProfile({
+          uid: String(apiUser.id),
+          email: apiUser.email,
+          displayName: apiUser.full_name,
+          role: apiUser.role,
+          createdAt: new Date().toISOString(),
+        });
+        setIsAuthenticated(true);
+      })
+      .catch((err) => {
+        if (active) setAuthNotice(err instanceof Error ? err.message : 'Unable to restore your session.');
+      })
+      .finally(() => {
+        if (active) setAuthReady(true);
+      });
+    return () => { active = false; };
   }, []);
 
   const handleSignIn = async (email: string, password: string) => {
@@ -248,18 +267,16 @@ export default function App() {
     'deliveries', 'reconciliation', 'historical', 'reports',
   ];
 
+  // Preload the complete report dataset after authentication so every reporting
+  // section is populated immediately, including after a browser refresh.
   useEffect(() => {
-    if (!isAuthenticated || !reportRoutes.includes(activeRoute)) return;
-    const filterKey = `${activeRoute === 'historical' ? 'HISTORY' : 'REPORTS'}|${filters.year}|${filters.month}|${filters.stationId}`;
+    if (!isAuthenticated) return;
+    const filterKey = 'ALL_REPORTS';
     if (loadedReportFilterKey === filterKey && productionData !== null) return;
     let active = true;
-    const stationName = filters.stationId === 'ALL' ? undefined : filters.stationId;
-    const requestFilters = activeRoute === 'historical'
-      ? { station: stationName }
-      : { year: filters.year, month: filters.month, station: stationName };
     setLoadingProductionData(true);
     setProductionDataError(null);
-    apiProductionReports(requestFilters)
+    apiProductionReports({})
       .then((production) => {
         if (active) {
           setProductionData(production);
@@ -274,12 +291,13 @@ export default function App() {
         if (active) setLoadingProductionData(false);
       });
     return () => { active = false; };
-  }, [isAuthenticated, activeRoute, filters.year, filters.month, filters.stationId, loadedReportFilterKey, productionData]);
+  }, [isAuthenticated, loadedReportFilterKey, productionData]);
 
-  // Workbook metadata is also used by the station register; load it only on those pages.
+  // Load workbook and import status at startup so station and monitoring
+  // sections do not appear empty when first opened.
   useEffect(() => {
-    if (!isAuthenticated || !['data-monitor', 'stations', 'station-detail'].includes(activeRoute)) {
-      if (!isAuthenticated) setProductionMonitor(null);
+    if (!isAuthenticated) {
+      setProductionMonitor(null);
       return;
     }
     let active = true;
@@ -287,7 +305,7 @@ export default function App() {
       .then((monitor) => { if (active) setProductionMonitor(monitor); })
       .catch(() => { if (active) setProductionMonitor(null); });
     return () => { active = false; };
-  }, [isAuthenticated, activeRoute]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     setReconciliationPage(1);
