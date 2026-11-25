@@ -453,8 +453,15 @@ export default function App() {
   const refreshProductionSnapshot = async () => {
     setLoadingProductionData(true);
     try {
-      const [version, reports, metadata, monitor] = await Promise.all([
-        apiProductionVersion(),
+      const version = await apiProductionVersion();
+      const cached = await readProductionCache(userProfile.uid);
+      if (cached && cached.version === version.version) {
+        // A sync can update its scan timestamp without changing any workbook.
+        // Refresh only the monitor status in that case.
+        setProductionMonitor(await apiProductionMonitor());
+        return;
+      }
+      const [reports, metadata, monitor] = await Promise.all([
         apiProductionReports({}),
         apiProductionMetadata(),
         apiProductionMonitor(),
