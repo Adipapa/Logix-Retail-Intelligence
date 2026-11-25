@@ -722,6 +722,7 @@ export default function App() {
             onNavigate={(r) => navigate(r, null)}
             liveAnalytics={liveAnalytics}
             liveAnalyticsError={liveAnalyticsError}
+            reports={filteredReports}
           />
         )}
 
