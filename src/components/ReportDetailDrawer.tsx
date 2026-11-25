@@ -163,10 +163,11 @@ export function ReportDetailDrawer({ report, onClose }: ReportDetailDrawerProps)
               <SheetTable title="Stock Control" headers={['STOCK POSITION', 'PMS (L)', 'AGO (L)']}>
                 <SheetRow label="Stock Opening (A)" values={[litres(report.pmsOpeningStock), litres(report.agoOpeningStock)]} />
                 <SheetRow label="Receipts (B)" values={[litres(report.pmsReceipts), litres(report.agoReceipts)]} />
-                <SheetRow label="Theoretical Stock (C)" values={[litres(report.pmsTheoreticalStock), litres(report.agoTheoreticalStock)]} />
+                <SheetRow label="Stock Total (C=A+B)" values={[litres(report.pmsOpeningStock == null && report.pmsReceipts == null ? null : (report.pmsOpeningStock ?? 0) + (report.pmsReceipts ?? 0)), litres(report.agoOpeningStock == null && report.agoReceipts == null ? null : (report.agoOpeningStock ?? 0) + (report.agoReceipts ?? 0))]} />
                 <SheetRow label="Sales (D)" values={[litres(report.pmsTotalLitres), litres(report.agoTotalLitres)]} />
-                <SheetRow label="Closing Stock (E)" values={[litres(report.pmsClosingStock), litres(report.agoClosingStock)]} />
-                <SheetRow label="Difference" values={[litres(report.pmsStockDiff), litres(report.agoStockDiff)]} alert={(report.pmsStockDiff ?? 0) < 0 || (report.agoStockDiff ?? 0) < 0} />
+                <SheetRow label="Theoretical Stock (E=C-D)" values={[litres(report.pmsTheoreticalStock), litres(report.agoTheoreticalStock)]} />
+                <SheetRow label="Closing Stock (F)" values={[litres(report.pmsClosingStock), litres(report.agoClosingStock)]} />
+                <SheetRow label="Difference (F-E)" values={[litres(report.pmsStockDiff), litres(report.agoStockDiff)]} alert={(report.pmsStockDiff ?? 0) < 0 || (report.agoStockDiff ?? 0) < 0} />
                 <SheetRow label="Control (%)" values={[formatPercent(report.pmsStockControlRatio), formatPercent(report.agoStockControlRatio)]} strong />
               </SheetTable>
 
